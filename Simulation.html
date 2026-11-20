@@ -1,0 +1,4360 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ElectroLab — Interactive 2D & 3D Electrostatics Studio</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS v3.4 CDN -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Lucide Icons UMD CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+
+  <!-- Three.js Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --bg-canvas: #0B0F19;
+      --glass-bg: rgba(13, 18, 32, 0.76);
+      --glass-elevated: rgba(15, 22, 39, 0.88);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(255, 255, 255, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-canvas);
+      color: #E2E8F0;
+      font-family: 'Inter', system-ui, sans-serif;
+      user-select: none;
+    }
+
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .glass-dropdown {
+      background: var(--glass-elevated);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Sleek custom range sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+      height: 18px;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      background: #F8FAFC;
+      border: 2px solid #38BDF8;
+      margin-top: -4.5px;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+      transition: transform 0.12s ease, background-color 0.12s ease;
+    }
+    input[type="range"]:hover::-webkit-slider-thumb {
+      transform: scale(1.15);
+      background: #FFFFFF;
+    }
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      background: #F8FAFC;
+      border: 2px solid #38BDF8;
+    }
+
+    /* Subtle scrollbar for compact dropdowns on small viewports */
+    .thin-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .thin-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .thin-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+    }
+
+    .dropdown-enter {
+      animation: dropIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes dropIn {
+      from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Canvas transition */
+    #canvas2d, #container3d {
+      transition: opacity 0.22s ease;
+    }
+
+    .dock-tooltip {
+      opacity: 0;
+      transform: translateX(-4px);
+      pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .dock-item:hover .dock-tooltip {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Toggle switch */
+    .toggle-pill {
+      position: relative;
+      width: 32px;
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      transition: background-color 0.18s ease;
+      flex-shrink: 0;
+    }
+    .toggle-pill::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: #CBD5E1;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s ease;
+    }
+    .toggle-pill.active {
+      background: rgba(56, 189, 248, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.5);
+    }
+    .toggle-pill.active::after {
+      transform: translateX(14px);
+      background: #38BDF8;
+    }
+  </style>
+</head>
+<body class="bg-[#0B0F19] text-slate-200 antialiased overflow-hidden">
+
+  <!-- Full-Viewport Canvases -->
+  <canvas id="canvas2d" class="fixed inset-0 w-full h-full block z-0"></canvas>
+  <div id="container3d" class="fixed inset-0 w-full h-full z-0 opacity-0 pointer-events-none"></div>
+
+  <!-- ========================================================= -->
+  <!-- TOP FLOATING NAVIGATION BAR (Progressive Disclosure)       -->
+  <!-- ========================================================= -->
+  <header class="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2 py-1.5 rounded-2xl glass-panel max-w-[96vw]">
+    <!-- Brand -->
+    <div class="flex items-center gap-2 pl-2 pr-2.5 py-1 border-r border-white/[0.08] shrink-0">
+      <div class="w-5 h-5 rounded-md bg-gradient-to-br from-sky-400 via-indigo-400 to-rose-400 flex items-center justify-center shadow-sm shadow-sky-500/20">
+        <i data-lucide="zap" class="w-3.5 h-3.5 text-slate-950 stroke-[2.5]"></i>
+      </div>
+      <span class="text-xs font-semibold tracking-tight text-slate-100 hidden sm:inline">ElectroLab</span>
+    </div>
+
+    <!-- Visualizations Dropdown Trigger -->
+    <div class="relative" data-dropdown-wrap="viz">
+      <button data-dropdown-btn="viz" class="nav-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors">
+        <i data-lucide="eye" class="w-3.5 h-3.5 text-sky-400"></i>
+        <span class="hidden md:inline">Visuals</span>
+        <i data-lucide="chevron-down" class="w-3 h-3 opacity-50"></i>
+      </button>
+    </div>
+
+    <!-- Boundaries Dropdown Trigger -->
+    <div class="relative" data-dropdown-wrap="boundaries">
+      <button data-dropdown-btn="boundaries" class="nav-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors">
+        <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i>
+        <span class="hidden md:inline">Boundaries</span>
+        <span id="badge-boundary" class="hidden w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <i data-lucide="chevron-down" class="w-3 h-3 opacity-50"></i>
+      </button>
+    </div>
+
+    <!-- Center-Top Mode Switcher Pill (2D / 3D) -->
+    <div class="relative flex items-center bg-slate-950/70 p-0.5 rounded-xl border border-white/[0.08] mx-0.5 shrink-0">
+      <div id="mode-indicator" class="absolute top-0.5 left-0.5 w-[calc(50%-2px)] h-[calc(100%-4px)] rounded-[10px] bg-white/[0.12] border border-white/[0.12] transition-transform duration-200 ease-out"></div>
+      <button id="btn-mode-2d" class="relative z-10 px-3 py-1 text-xs font-semibold tracking-tight text-white transition-colors">2D</button>
+      <button id="btn-mode-3d" class="relative z-10 px-3 py-1 text-xs font-semibold tracking-tight text-slate-400 hover:text-slate-200 transition-colors">3D</button>
+    </div>
+
+    <!-- Physics & Grid Dropdown Trigger -->
+    <div class="relative" data-dropdown-wrap="physics">
+      <button data-dropdown-btn="physics" class="nav-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors">
+        <i data-lucide="sliders" class="w-3.5 h-3.5 text-violet-400"></i>
+        <span class="hidden md:inline">Physics</span>
+        <i data-lucide="chevron-down" class="w-3 h-3 opacity-50"></i>
+      </button>
+    </div>
+
+    <!-- Presets Dropdown Trigger -->
+    <div class="relative" data-dropdown-wrap="presets">
+      <button data-dropdown-btn="presets" class="nav-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors">
+        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+        <span class="hidden md:inline">Presets</span>
+        <i data-lucide="chevron-down" class="w-3 h-3 opacity-50"></i>
+      </button>
+    </div>
+
+    <div class="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0"></div>
+
+    <!-- Probe Toggle -->
+    <button id="btn-probe-toggle" title="Toggle Voltmeter & Field Probe (P)" class="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0">
+      <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+      <span class="hidden lg:inline">Probe</span>
+    </button>
+
+    <!-- Test Launcher Toggle -->
+    <button id="btn-launcher-toggle" title="Test Charge Launcher Mode (Space to fire)" class="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0">
+      <i data-lucide="play" class="w-3.5 h-3.5"></i>
+      <span class="hidden lg:inline">Launch</span>
+    </button>
+
+    <!-- Reset Canvas -->
+    <button id="btn-reset-canvas" title="Reset Canvas" class="flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors shrink-0">
+      <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+    </button>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- DROPDOWN PANELS (Only one open at a time)                 -->
+  <!-- ========================================================= -->
+  <div id="dropdown-layer" class="fixed inset-0 z-40 pointer-events-none">
+    <!-- Visualizations Panel -->
+    <div id="panel-viz" class="hidden pointer-events-auto fixed top-16 left-1/2 -translate-x-1/2 sm:translate-x-0 w-72 rounded-2xl glass-dropdown p-3.5 dropdown-enter max-h-[75vh] overflow-y-auto thin-scroll">
+      <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/[0.07]">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Visualizations</span>
+        <span class="text-[10px] font-mono text-slate-500">Overlays</span>
+      </div>
+      <div class="space-y-2">
+        <button data-toggle="showFieldLines" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Electric Field Lines (<span class="font-mono">E</span>)</div>
+            <div class="text-[10px] text-slate-500">RK4 streamlines with Plasma intensity</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <button data-toggle="showVectorGrid" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Vector Arrow Grid</div>
+            <div class="text-[10px] text-slate-500">Spatial direction & log-magnitude arrows</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <button data-toggle="showEquipotentials" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Equipotential Contours</div>
+            <div class="text-[10px] text-slate-500">2D isolines & 3D translucent shells</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <button data-toggle="showHeatmap" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Potential (<span class="font-mono">V</span>) Heatmap</div>
+            <div class="text-[10px] text-slate-500">Color-blind-safe cyan ↔ gold scale</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <button data-toggle="showForceVectors" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Net Force Vectors (<span class="font-mono">F = qE</span>)</div>
+            <div class="text-[10px] text-slate-500">Resultant Coulomb force on charges</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <button data-toggle="showReadouts" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Live Value Readouts</div>
+            <div class="text-[10px] text-slate-500">Floating charge & force labels</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Boundaries Panel -->
+    <div id="panel-boundaries" class="hidden pointer-events-auto fixed top-16 left-1/2 -translate-x-1/2 sm:translate-x-0 w-80 rounded-2xl glass-dropdown p-3.5 dropdown-enter max-h-[75vh] overflow-y-auto thin-scroll">
+      <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/[0.07]">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Grounded Conductors (V = 0)</span>
+        <span class="text-[10px] font-mono text-emerald-400">Method of Images</span>
+      </div>
+      <div class="space-y-1.5 mb-3" id="boundary-options">
+        <button data-boundary="none" class="boundary-btn w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left border border-transparent hover:bg-white/[0.05] transition-all">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Free Space (Unbounded)</div>
+            <div class="text-[10px] text-slate-500">No external conducting surfaces</div>
+          </div>
+          <span class="boundary-check w-2 h-2 rounded-full bg-emerald-400 opacity-0"></span>
+        </button>
+        <button data-boundary="plane" class="boundary-btn w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left border border-transparent hover:bg-white/[0.05] transition-all">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Single Ground Plane (<span class="font-mono">y = 0</span>)</div>
+            <div class="text-[10px] text-slate-500">1 mirror image at (x, −y, z) · 90° termination</div>
+          </div>
+          <span class="boundary-check w-2 h-2 rounded-full bg-emerald-400 opacity-0"></span>
+        </button>
+        <button data-boundary="corner" class="boundary-btn w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left border border-transparent hover:bg-white/[0.05] transition-all">
+          <div>
+            <div class="text-xs font-medium text-slate-200">90° Grounded Corner (<span class="font-mono">x=0, y=0</span>)</div>
+            <div class="text-[10px] text-slate-500">Exact 3-image solution (−q, −q, +q)</div>
+          </div>
+          <span class="boundary-check w-2 h-2 rounded-full bg-emerald-400 opacity-0"></span>
+        </button>
+        <button data-boundary="parallel" class="boundary-btn w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left border border-transparent hover:bg-white/[0.05] transition-all">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Parallel Grounded Plates</div>
+            <div class="text-[10px] text-slate-500">Alternating image series between y = ±h</div>
+          </div>
+          <span class="boundary-check w-2 h-2 rounded-full bg-emerald-400 opacity-0"></span>
+        </button>
+        <button data-boundary="cavity" class="boundary-btn w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left border border-transparent hover:bg-white/[0.05] transition-all">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Grounded Circular/Spherical Cavity</div>
+            <div class="text-[10px] text-slate-500">Kelvin inversion image outside r = R</div>
+          </div>
+          <span class="boundary-check w-2 h-2 rounded-full bg-emerald-400 opacity-0"></span>
+        </button>
+      </div>
+
+      <div class="pt-2.5 border-t border-white/[0.07] space-y-2.5">
+        <button data-toggle="showVirtualImages" class="viz-toggle w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Show Virtual Image Charges</div>
+            <div class="text-[10px] text-slate-500">Render dashed ghost charges behind wall</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <div id="boundary-param-wrap" class="hidden px-2 pt-1">
+          <div class="flex items-center justify-between text-[11px] mb-1">
+            <span id="boundary-param-label" class="text-slate-400">Plate Half-Gap h</span>
+            <span id="boundary-param-val" class="font-mono text-emerald-300 tabular-nums">2.5 m</span>
+          </div>
+          <input id="boundary-param-slider" type="range" min="1.2" max="4.0" step="0.1" value="2.5" class="w-full" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Physics & Grid Panel -->
+    <div id="panel-physics" class="hidden pointer-events-auto fixed top-16 left-1/2 -translate-x-1/2 sm:translate-x-0 w-80 rounded-2xl glass-dropdown p-3.5 dropdown-enter max-h-[75vh] overflow-y-auto thin-scroll">
+      <div class="flex items-center justify-between pb-2.5 mb-3 border-b border-white/[0.07]">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Physics & Grid</span>
+        <span class="text-[10px] font-mono text-violet-400">RK4 Solver</span>
+      </div>
+
+      <div class="space-y-3">
+        <!-- Snap to Grid -->
+        <button data-toggle="snapToGrid" class="viz-toggle w-full flex items-center justify-between px-1.5 py-1 rounded-lg hover:bg-white/[0.04] transition-colors text-left">
+          <div>
+            <div class="text-xs font-medium text-slate-200">Snap to Grid (<span class="font-mono">G</span>)</div>
+            <div class="text-[10px] text-slate-500">Align placed charges to grid intersections</div>
+          </div>
+          <span class="toggle-pill"></span>
+        </button>
+
+        <!-- Grid Spacing -->
+        <div class="px-1.5">
+          <div class="flex items-center justify-between text-[11px] mb-1">
+            <span class="text-slate-400">Grid Spacing</span>
+            <span id="val-grid-spacing" class="font-mono text-slate-200 tabular-nums">0.50 m</span>
+          </div>
+          <input id="slider-grid-spacing" type="range" min="0.25" max="2.0" step="0.25" value="0.5" class="w-full" />
+        </div>
+
+        <!-- Relative Permittivity -->
+        <div class="px-1.5">
+          <div class="flex items-center justify-between text-[11px] mb-1">
+            <span class="text-slate-400">Relative Permittivity (<span class="font-mono">ε<sub>r</sub></span>)</span>
+            <span id="val-epsilon-r" class="font-mono text-sky-300 tabular-nums">1.0</span>
+          </div>
+          <input id="slider-epsilon-r" type="range" min="1.0" max="10.0" step="0.1" value="1.0" class="w-full" />
+          <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+            <span>Vacuum (1.0)</span><span>Glass (~4.5)</span><span>High-κ (10)</span>
+          </div>
+        </div>
+
+        <!-- Streamline Density -->
+        <div class="px-1.5">
+          <div class="flex items-center justify-between text-[11px] mb-1">
+            <span class="text-slate-400">Streamline Density</span>
+            <span id="val-streamline-density" class="font-mono text-slate-200 tabular-nums">16</span>
+          </div>
+          <input id="slider-streamline-density" type="range" min="8" max="28" step="2" value="16" class="w-full" />
+        </div>
+
+        <!-- Integration Quality -->
+        <div class="px-1.5">
+          <div class="text-[11px] text-slate-400 mb-1.5">RK4 Integration Step Quality</div>
+          <div class="grid grid-cols-3 gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/[0.06]">
+            <button data-quality="fast" class="quality-btn py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition-colors">Fast</button>
+            <button data-quality="standard" class="quality-btn py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition-colors">Standard</button>
+            <button data-quality="high" class="quality-btn py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white transition-colors">High</button>
+          </div>
+        </div>
+
+        <!-- Test Charge Launcher Section -->
+        <div class="pt-2.5 border-t border-white/[0.07] space-y-2.5 px-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Test Charge Launcher</span>
+            <span class="text-[10px] font-mono text-slate-500">Space</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-test-pos" class="flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all">+1 nC (+)</button>
+            <button id="btn-test-neg" class="flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all">−1 nC (−)</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-launcher-panel-toggle" class="flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] transition-colors">
+              Click-to-Launch: Off
+            </button>
+            <button id="btn-clear-particles" class="py-1.5 px-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-rose-300 bg-white/[0.04] hover:bg-rose-500/10 border border-white/[0.06] transition-colors">
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Presets Panel -->
+    <div id="panel-presets" class="hidden pointer-events-auto fixed top-16 left-1/2 -translate-x-1/2 sm:translate-x-0 w-80 rounded-2xl glass-dropdown p-3 dropdown-enter max-h-[75vh] overflow-y-auto thin-scroll">
+      <div class="flex items-center justify-between px-1.5 pb-2 mb-2 border-b border-white/[0.07]">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Educational Presets</span>
+        <span class="text-[10px] text-slate-500">One-Click</span>
+      </div>
+      <div class="space-y-1">
+        <button data-preset="single" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Single Point Charge</div>
+          <div class="text-[10px] text-slate-500">Radial Coulomb field &amp; spherical equipotentials</div>
+        </button>
+        <button data-preset="dipole" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Electric Dipole</div>
+          <div class="text-[10px] text-slate-500">Paired +q and −q showing dipole lobes &amp; V = 0 plane</div>
+        </button>
+        <button data-preset="quadrupole" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Electric Quadrupole</div>
+          <div class="text-[10px] text-slate-500">4 alternating charges with saddle point at origin</div>
+        </button>
+        <button data-preset="transmission" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Overhead Transmission Line</div>
+          <div class="text-[10px] text-slate-500">Line charge above grounded earth (y = 0) + image</div>
+        </button>
+        <button data-preset="corner90" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Line Charge in a 90° Grounded Corner</div>
+          <div class="text-[10px] text-slate-500">3-image solution inside x = 0, y = 0 corner walls</div>
+        </button>
+        <button data-preset="cloud" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Charged Cloud (Gauss's Law)</div>
+          <div class="text-[10px] text-slate-500">Uniform ρ sphere: E ∝ r inside, E ∝ 1/r² outside</div>
+        </button>
+        <button data-preset="capacitor" class="preset-btn w-full text-left px-2.5 py-2 rounded-xl hover:bg-white/[0.06] transition-colors">
+          <div class="text-xs font-medium text-slate-200">Parallel Plate Capacitor</div>
+          <div class="text-[10px] text-slate-500">Oppositely charged rods with uniform gap &amp; fringing</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- LEFT FLOATING CHARGE PALETTE DOCK (Drag & Drop)           -->
+  <!-- ========================================================= -->
+  <aside class="fixed left-3.5 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1.5 p-1.5 rounded-2xl glass-panel">
+    <!-- Polarity Quick Toggle for newly dropped charges -->
+    <button id="btn-dock-polarity" title="Default Polarity for New Charges (click to flip)" class="w-9 h-7 rounded-xl flex items-center justify-center text-[11px] font-mono font-bold transition-all border border-white/[0.1] bg-rose-500/20 text-rose-300 hover:bg-rose-500/30">
+      +q
+    </button>
+    <div class="w-6 h-px bg-white/[0.08]"></div>
+
+    <!-- Point Charge -->
+    <div class="dock-item relative group" data-spawn-type="point">
+      <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/[0.08] active:scale-95 transition-all cursor-grab active:cursor-grabbing">
+        <span class="w-4 h-4 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 shadow-[0_0_12px_rgba(244,63,94,0.65)] ring-1 ring-white/30"></span>
+      </button>
+      <div class="dock-tooltip absolute left-12 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg glass-dropdown whitespace-nowrap z-50">
+        <div class="text-xs font-medium text-slate-100">Point Charge (<span class="font-mono">q</span>)</div>
+        <div class="text-[10px] text-slate-400">Drag onto canvas · ±10 nC</div>
+      </div>
+    </div>
+
+    <!-- Line Charge -->
+    <div class="dock-item relative group" data-spawn-type="line">
+      <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/[0.08] active:scale-95 transition-all cursor-grab active:cursor-grabbing text-amber-300">
+        <i data-lucide="minus" class="w-5 h-5 rotate-[-35deg] stroke-[2.75]"></i>
+      </button>
+      <div class="dock-tooltip absolute left-12 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg glass-dropdown whitespace-nowrap z-50">
+        <div class="text-xs font-medium text-slate-100">Line Charge (<span class="font-mono">λ</span>)</div>
+        <div class="text-[10px] text-slate-400">∞ ⊥ line (1/r) or finite rod</div>
+      </div>
+    </div>
+
+    <!-- Spherical Charge Cloud -->
+    <div class="dock-item relative group" data-spawn-type="cloud">
+      <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/[0.08] active:scale-95 transition-all cursor-grab active:cursor-grabbing">
+        <span class="w-5 h-5 rounded-full border border-dashed border-amber-300/80 bg-amber-400/20 shadow-[inset_0_0_8px_rgba(251,191,36,0.4)]"></span>
+      </button>
+      <div class="dock-tooltip absolute left-12 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg glass-dropdown whitespace-nowrap z-50">
+        <div class="text-xs font-medium text-slate-100">Spherical Cloud (<span class="font-mono">ρ, R</span>)</div>
+        <div class="text-[10px] text-slate-400">Gauss's Law · E ∝ r inside</div>
+      </div>
+    </div>
+
+    <!-- Conducting Sphere -->
+    <div class="dock-item relative group" data-spawn-type="conductor">
+      <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/[0.08] active:scale-95 transition-all cursor-grab active:cursor-grabbing">
+        <span class="w-5 h-5 rounded-full bg-gradient-to-br from-slate-200 via-slate-400 to-slate-700 ring-1 ring-white/40 shadow-inner"></span>
+      </button>
+      <div class="dock-tooltip absolute left-12 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg glass-dropdown whitespace-nowrap z-50">
+        <div class="text-xs font-medium text-slate-100">Conducting Sphere (<span class="font-mono">V₀ / Q</span>)</div>
+        <div class="text-[10px] text-slate-400">Equipotential · E = 0 inside</div>
+      </div>
+    </div>
+
+    <!-- Electric Dipole -->
+    <div class="dock-item relative group" data-spawn-type="dipole">
+      <button class="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/[0.08] active:scale-95 transition-all cursor-grab active:cursor-grabbing">
+        <span class="flex items-center gap-0.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+          <span class="w-1.5 h-0.5 bg-slate-400"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+        </span>
+      </button>
+      <div class="dock-tooltip absolute left-12 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg glass-dropdown whitespace-nowrap z-50">
+        <div class="text-xs font-medium text-slate-100">Electric Dipole (<span class="font-mono">±q, d</span>)</div>
+        <div class="text-[10px] text-slate-400">Paired +q/−q · adjustable angle</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Drag Ghost for Dock Drag-and-Drop -->
+  <div id="dock-drag-ghost" class="fixed pointer-events-none z-50 hidden -translate-x-1/2 -translate-y-1/2">
+    <div class="w-10 h-10 rounded-full glass-dropdown flex items-center justify-center border border-sky-400/50 shadow-[0_0_24px_rgba(56,189,248,0.45)]">
+      <div id="dock-drag-ghost-dot" class="w-4 h-4 rounded-full bg-rose-400"></div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- CONTEXTUAL SELECTION POPOVER                              -->
+  <!-- ========================================================= -->
+  <div id="selection-popover" class="hidden fixed z-30 w-64 rounded-2xl glass-dropdown p-3 dropdown-enter">
+    <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/[0.08]">
+      <div class="flex items-center gap-2">
+        <span id="pop-dot" class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+        <span id="pop-title" class="text-xs font-semibold text-slate-100">Point Charge</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button id="pop-lock" title="Lock / Unlock Position" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors">
+          <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
+        </button>
+        <button id="pop-delete" title="Delete (Del)" class="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        </button>
+        <button id="pop-close" title="Deselect (Esc)" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    </div>
+    <div id="pop-body" class="space-y-2.5 text-xs"></div>
+    <div id="pop-coords" class="mt-2.5 pt-2 border-t border-white/[0.06] flex items-center justify-between text-[10px] font-mono text-slate-400 tabular-nums"></div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- VOLTMETER / FIELD PROBE FLOATING READOUT                  -->
+  <!-- ========================================================= -->
+  <div id="probe-card" class="hidden fixed top-16 right-4 z-20 w-60 rounded-2xl glass-panel p-3">
+    <div class="flex items-center justify-between pb-1.5 mb-2 border-b border-white/[0.07]">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-300">Field &amp; Volt Probe</span>
+      </div>
+      <span id="probe-region-badge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">Free Space</span>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div class="bg-slate-950/50 rounded-xl p-2 border border-white/[0.05]">
+        <div class="text-[10px] text-slate-500">Potential V</div>
+        <div id="probe-v" class="text-sm font-mono font-semibold text-amber-300 tabular-nums">0.00 V</div>
+      </div>
+      <div class="bg-slate-950/50 rounded-xl p-2 border border-white/[0.05]">
+        <div class="text-[10px] text-slate-500">|E| Magnitude</div>
+        <div id="probe-e-mag" class="text-sm font-mono font-semibold text-sky-300 tabular-nums">0.00 V/m</div>
+      </div>
+    </div>
+    <div class="text-[10px] font-mono text-slate-400 tabular-nums space-y-0.5 bg-slate-950/35 rounded-lg px-2 py-1.5 border border-white/[0.04]">
+      <div class="flex justify-between"><span>E<sub>x</sub>, E<sub>y</sub>, E<sub>z</sub></span><span id="probe-e-vec" class="text-slate-200">0, 0, 0</span></div>
+      <div class="flex justify-between"><span>Position (m)</span><span id="probe-pos" class="text-slate-300">0.00, 0.00, 0.00</span></div>
+    </div>
+    <div class="mt-1.5 text-[10px] text-slate-500 flex items-center justify-between">
+      <span>Drag probe marker on canvas</span>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- 3D SLICE PLANE & QUICK-SNAP CAMERA PILLS                  -->
+  <!-- ========================================================= -->
+  <div id="slice-controls-3d" class="hidden fixed bottom-3.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2.5 px-3 py-1.5 rounded-2xl glass-panel max-w-[92vw]">
+    <button id="btn-slice-toggle" class="flex items-center gap-1.5 text-xs font-medium text-sky-300 hover:text-white transition-colors shrink-0">
+      <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+      <span class="hidden sm:inline">Slice</span>
+    </button>
+    <div class="flex items-center bg-slate-950/60 p-0.5 rounded-lg border border-white/[0.07] text-[11px] font-mono shrink-0">
+      <button data-slice-axis="xy" class="slice-axis-btn px-2 py-0.5 rounded-md text-white bg-white/[0.12]">XY</button>
+      <button data-slice-axis="xz" class="slice-axis-btn px-2 py-0.5 rounded-md text-slate-400 hover:text-white">XZ</button>
+      <button data-slice-axis="yz" class="slice-axis-btn px-2 py-0.5 rounded-md text-slate-400 hover:text-white">YZ</button>
+    </div>
+    <input id="slider-slice-pos" type="range" min="-4.0" max="4.0" step="0.1" value="0.0" class="w-28 sm:w-36" />
+    <span id="val-slice-pos" class="text-[11px] font-mono text-slate-300 tabular-nums w-14 text-right shrink-0">z = 0.0m</span>
+  </div>
+
+  <div id="camera-controls-3d" class="hidden fixed bottom-3.5 right-3.5 z-20 flex items-center gap-1 p-1 rounded-xl glass-panel">
+    <button data-cam="top" class="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors">Top</button>
+    <button data-cam="front" class="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors">Front</button>
+    <button data-cam="side" class="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors">Side</button>
+    <button data-cam="iso" class="px-2 py-1 rounded-lg text-[11px] font-medium text-sky-300 hover:text-white hover:bg-white/[0.08] transition-colors">Iso</button>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- SUBTLE COLOR SCALE LEGEND & SHORTCUT HINT                 -->
+  <!-- ========================================================= -->
+  <div id="legend-bar" class="fixed bottom-3.5 left-3.5 z-20 flex flex-col gap-1.5 pointer-events-none">
+    <div id="legend-potential" class="glass-panel rounded-xl px-2.5 py-1.5 flex items-center gap-2 text-[10px] font-mono">
+      <span class="text-sky-300">−V</span>
+      <div class="w-24 h-2 rounded-full" style="background: linear-gradient(90deg, #67e8f9 0%, #0ea5e9 22%, #0B0F19 50%, #f43f5e 78%, #fde047 100%);"></div>
+      <span class="text-amber-300">+V</span>
+    </div>
+    <div class="hidden sm:flex items-center gap-2 text-[10px] text-slate-500 px-1">
+      <span><kbd class="px-1 py-0.5 rounded bg-white/[0.06] text-slate-400 font-mono">Space</kbd> Test Particle</span>
+      <span>·</span>
+      <span><kbd class="px-1 py-0.5 rounded bg-white/[0.06] text-slate-400 font-mono">2/3</kbd> View</span>
+      <span>·</span>
+      <span><kbd class="px-1 py-0.5 rounded bg-white/[0.06] text-slate-400 font-mono">Del</kbd> Remove</span>
+    </div>
+  </div>
+
+  <!-- Launcher Active Pill Indicator -->
+  <div id="launcher-banner" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full glass-panel border-sky-400/30 text-[11px] text-sky-200 flex items-center gap-2 pointer-events-none">
+    <span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping"></span>
+    <span>Click anywhere on canvas to release <strong id="launcher-banner-q">+1 nC</strong> test charge</span>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MAIN APPLICATION SCRIPT                                   -->
+  <!-- ========================================================= -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Physical Constants:
+    // Spatial units: meters (m), Charge units: nanocoulombs (nC = 1e-9 C)
+    // k_e * 1e-9 = 8.9875517923 V·m / nC
+    const K_NC = 8.9875517923;
+    const TWO_PI_K_NC = 2.0 * K_NC; // 1/(2*pi*eps0) * 1e-9 = 17.97510358 V·m / nC
+
+    // =========================================================
+    // COLOR SCALES (Color-blind-safe Plasma & Cyan-Slate-Gold)
+    // =========================================================
+    const PLASMA_STOPS = [
+      [13, 8, 135],
+      [126, 3, 168],
+      [204, 71, 120],
+      [248, 149, 64],
+      [240, 249, 33]
+    ];
+
+    function samplePlasma(t) {
+      const c = Math.max(0, Math.min(1, t));
+      const idx = c * (PLASMA_STOPS.length - 1);
+      const i0 = Math.floor(idx);
+      const i1 = Math.min(PLASMA_STOPS.length - 1, i0 + 1);
+      const f = idx - i0;
+      const a = PLASMA_STOPS[i0];
+      const b = PLASMA_STOPS[i1];
+      return [
+        Math.round(a[0] + (b[0] - a[0]) * f),
+        Math.round(a[1] + (b[1] - a[1]) * f),
+        Math.round(a[2] + (b[2] - a[2]) * f)
+      ];
+    }
+
+    function plasmaCSS(t, alpha = 1) {
+      const [r, g, b] = samplePlasma(t);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    // Diverging potential colormap centered on #0B0F19 (11,15,25)
+    const POT_STOPS = [
+      [-1.00, [103, 232, 249]],
+      [-0.58, [14, 165, 233]],
+      [-0.22, [22, 56, 108]],
+      [ 0.00, [11, 15, 25]],
+      [ 0.22, [96, 30, 52]],
+      [ 0.58, [244, 63, 94]],
+      [ 1.00, [253, 224, 71]]
+    ];
+
+    function samplePotentialColor(u) {
+      const c = Math.max(-1, Math.min(1, u));
+      for (let i = 0; i < POT_STOPS.length - 1; i++) {
+        const [t0, c0] = POT_STOPS[i];
+        const [t1, c1] = POT_STOPS[i + 1];
+        if (c >= t0 && c <= t1) {
+          const f = (c - t0) / (t1 - t0);
+          return [
+            Math.round(c0[0] + (c1[0] - c0[0]) * f),
+            Math.round(c0[1] + (c1[1] - c0[1]) * f),
+            Math.round(c0[2] + (c1[2] - c0[2]) * f)
+          ];
+        }
+      }
+      return POT_STOPS[3][1];
+    }
+
+    // Smooth voltage normalization with asinh compression
+    function normalizeV(V) {
+      const scale = 12.0;
+      const maxNorm = Math.asinh(120.0 / scale);
+      return Math.max(-1, Math.min(1, Math.asinh(V / scale) / maxNorm));
+    }
+
+    function normalizeEMag(E) {
+      // Maps 0..~200 V/m smoothly to 0..1
+      return Math.max(0, Math.min(1, Math.log1p(E * 0.35) / Math.log1p(70.0)));
+    }
+
+    // =========================================================
+    // FORMATTING HELPERS
+    // =========================================================
+    function fmtVal(val, unit) {
+      const abs = Math.abs(val);
+      if (abs === 0) return `0.00 ${unit}`;
+      if (abs >= 1e6) return `${(val / 1e6).toFixed(2)} M${unit}`;
+      if (abs >= 1e3) return `${(val / 1e3).toFixed(2)} k${unit}`;
+      if (abs < 0.01 && abs >= 1e-4) return `${(val * 1e3).toFixed(2)} m${unit}`;
+      if (abs < 1e-4) return `${val.toExponential(1)} ${unit}`;
+      return `${val.toFixed(2)} ${unit}`;
+    }
+
+    function fmtForce(F_nC_V_per_m) {
+      // Force in N: q[1e-9 C] * E[V/m] = 1e-9 N = 1 nN!
+      const nN = F_nC_V_per_m;
+      const abs = Math.abs(nN);
+      if (abs >= 1e6) return `${(nN / 1e6).toFixed(2)} mN`;
+      if (abs >= 1e3) return `${(nN / 1e3).toFixed(2)} µN`;
+      if (abs < 0.1 && abs > 0) return `${(nN * 1e3).toFixed(1)} pN`;
+      return `${nN.toFixed(1)} nN`;
+    }
+
+    // =========================================================
+    // APPLICATION STATE
+    // =========================================================
+    let nextId = 1;
+    const state = {
+      mode: '2d', // '2d' | '3d'
+      objects: [],
+      selectedId: null,
+      defaultPolarity: 1, // +1 or -1 for dock spawns
+      boundary: 'none', // 'none' | 'plane' | 'corner' | 'parallel' | 'cavity'
+      boundaryParam: 2.5, // half-gap h for parallel, or radius R for cavity
+      showVirtualImages: true,
+
+      // Visualizations
+      showFieldLines: true,
+      showVectorGrid: false,
+      showEquipotentials: true,
+      showHeatmap: true,
+      showForceVectors: false,
+      showReadouts: true,
+
+      // Physics & Grid
+      snapToGrid: false,
+      gridSpacing: 0.5,
+      epsilonR: 1.0,
+      streamlineDensity: 16,
+      quality: 'standard', // 'fast' | 'standard' | 'high'
+
+      // Test Charge Launcher
+      launcherActive: false,
+      testChargeQ: 1.0, // +1 or -1 nC
+      particles: [],
+
+      // Interactive Probe
+      probeActive: false,
+      probePos: { x: 1.5, y: 1.2, z: 0 },
+
+      // 3D Slice Plane
+      sliceEnabled: true,
+      sliceAxis: 'xy', // 'xy' | 'xz' | 'yz'
+      slicePos: 0.0,
+
+      // Interaction flags
+      isDragging: false,
+      dirtyPhysics: true,
+      dirtyFieldLines: true,
+      dirtyHeatmap: true,
+      dirty3DIso: true,
+
+      // 2D camera pan/zoom
+      view2D: {
+        cx: 0,
+        cy: 0,
+        scale: 78 // pixels per meter
+      },
+
+      // Last pointer world coords (for Space particle launch)
+      pointerWorld: { x: 0, y: 0, z: 0, valid: false }
+    };
+
+    // =========================================================
+    // OBJECT FACTORY & CONSTRAINTS
+    // =========================================================
+    function createChargeObject(type, x = 0, y = 0, z = 0, overrides = {}) {
+      const pol = state.defaultPolarity;
+      const base = {
+        id: nextId++,
+        type,
+        x, y, z,
+        locked: false
+      };
+      if (type === 'point') {
+        Object.assign(base, { q: 5.0 * pol });
+      } else if (type === 'line') {
+        Object.assign(base, {
+          lambda: 4.0 * pol,
+          lineMode: 'perp', // 'perp' (infinite along z) | 'rod' (finite segment)
+          length: 3.0,
+          angle: 0 // degrees in XY plane
+        });
+      } else if (type === 'cloud') {
+        Object.assign(base, {
+          rho: 0.6 * pol, // nC/m^3
+          radius: 1.5
+        });
+      } else if (type === 'conductor') {
+        Object.assign(base, {
+          condMode: 'Q', // 'Q' | 'V0'
+          Q: 4.0 * pol,
+          V0: 15.0 * pol,
+          radius: 0.9
+        });
+      } else if (type === 'dipole') {
+        Object.assign(base, {
+          q: 5.0,
+          separation: 1.8,
+          angle: 0, // degrees
+          tilt: 0 // 3D out-of-plane angle
+        });
+      }
+      Object.assign(base, overrides);
+      constrainObjectToBoundary(base);
+      return base;
+    }
+
+    function constrainObjectToBoundary(obj) {
+      const margin = (obj.type === 'cloud' || obj.type === 'conductor') ? obj.radius + 0.15 : 0.25;
+      if (state.boundary === 'plane') {
+        if (obj.y < margin) obj.y = margin;
+      } else if (state.boundary === 'corner') {
+        if (obj.x < margin) obj.x = margin;
+        if (obj.y < margin) obj.y = margin;
+      } else if (state.boundary === 'parallel') {
+        const h = state.boundaryParam;
+        const maxY = Math.max(0.2, h - margin);
+        obj.y = Math.max(-maxY, Math.min(maxY, obj.y));
+      } else if (state.boundary === 'cavity') {
+        const R = state.boundaryParam;
+        const maxR = Math.max(0.25, R - margin);
+        const r = Math.hypot(obj.x, obj.y, state.mode === '3d' ? obj.z : 0);
+        if (r > maxR && r > 1e-6) {
+          const s = maxR / r;
+          obj.x *= s;
+          obj.y *= s;
+          if (state.mode === '3d') obj.z *= s;
+        }
+      }
+    }
+
+    function constrainAllObjects() {
+      for (const obj of state.objects) {
+        constrainObjectToBoundary(obj);
+      }
+    }
+
+    function getCloudTotalCharge(obj) {
+      return (4 / 3) * Math.PI * Math.pow(obj.radius, 3) * obj.rho;
+    }
+
+    function getDipolePoles(obj) {
+      const rad = (obj.angle * Math.PI) / 180;
+      const tilt = ((obj.tilt || 0) * Math.PI) / 180;
+      const half = obj.separation * 0.5;
+      const ux = Math.cos(rad) * Math.cos(tilt);
+      const uy = Math.sin(rad) * Math.cos(tilt);
+      const uz = Math.sin(tilt);
+      return {
+        pos: { x: obj.x + half * ux, y: obj.y + half * uy, z: obj.z + half * uz, q: Math.abs(obj.q) },
+        neg: { x: obj.x - half * ux, y: obj.y - half * uy, z: obj.z - half * uz, q: -Math.abs(obj.q) },
+        u: { x: ux, y: uy, z: uz }
+      };
+    }
+
+    // =========================================================
+    // ELECTROSTATICS PHYSICS ENGINE (Superposition + Images)
+    // =========================================================
+    class PhysicsEngine {
+      constructor() {
+        this.primitives = [];     // Physical sub-elements
+        this.imagePrimitives = []; // Virtual image elements (for solver & ghost render)
+        this.ghostMarkers = [];    // Clean visual markers for "Show Virtual Image Charges"
+        this.conductors = [];      // Conducting sphere descriptors
+      }
+
+      isInsideGroundedWall(x, y, z) {
+        const b = state.boundary;
+        if (b === 'plane') return y <= 0;
+        if (b === 'corner') return x <= 0 || y <= 0;
+        if (b === 'parallel') return Math.abs(y) >= state.boundaryParam;
+        if (b === 'cavity') return (x * x + y * y + z * z) >= state.boundaryParam * state.boundaryParam;
+        return false;
+      }
+
+      // Build expanded primitive list + Kelvin images + Grounded Boundary images
+      rebuildSources() {
+        this.primitives = [];
+        this.imagePrimitives = [];
+        this.ghostMarkers = [];
+        this.conductors = [];
+
+        const kEff = K_NC / state.epsilonR;
+
+        // 1. Expand non-conductor user objects
+        const extPointLikes = []; // used for Kelvin sphere induction
+
+        for (const obj of state.objects) {
+          if (obj.type === 'point') {
+            const p = { parentId: obj.id, kind: 'point', x: obj.x, y: obj.y, z: obj.z, q: obj.q, isVirtual: false };
+            this.primitives.push(p);
+            extPointLikes.push(p);
+          } else if (obj.type === 'dipole') {
+            const { pos, neg } = getDipolePoles(obj);
+            const p1 = { parentId: obj.id, kind: 'point', ...pos, isVirtual: false };
+            const p2 = { parentId: obj.id, kind: 'point', ...neg, isVirtual: false };
+            this.primitives.push(p1, p2);
+            extPointLikes.push(p1, p2);
+          } else if (obj.type === 'cloud') {
+            const Q = getCloudTotalCharge(obj);
+            const c = { parentId: obj.id, kind: 'cloud', x: obj.x, y: obj.y, z: obj.z, radius: obj.radius, Q, rho: obj.rho, isVirtual: false };
+            this.primitives.push(c);
+            extPointLikes.push({ parentId: obj.id, x: obj.x, y: obj.y, z: obj.z, q: Q });
+          } else if (obj.type === 'line') {
+            const rad = (obj.angle * Math.PI) / 180;
+            this.primitives.push({
+              parentId: obj.id,
+              kind: obj.lineMode === 'rod' ? 'rod' : 'perpLine',
+              x: obj.x, y: obj.y, z: obj.z,
+              lambda: obj.lambda,
+              length: obj.length,
+              ux: Math.cos(rad), uy: Math.sin(rad), uz: 0,
+              isVirtual: false
+            });
+          } else if (obj.type === 'conductor') {
+            this.conductors.push({
+              parentId: obj.id,
+              x: obj.x, y: obj.y, z: obj.z,
+              radius: obj.radius,
+              condMode: obj.condMode,
+              Q: obj.Q,
+              V0: obj.V0,
+              surfaceV: 0,
+              coreQ: 0,
+              images: []
+            });
+          }
+        }
+
+        // 2. Apply Grounded Boundary Images to non-conductor primitives first
+        //    so conducting spheres also respond to boundary image charges!
+        const nonConductorVirtuals = [];
+        for (const p of this.primitives) {
+          this._generateBoundaryImages(p, nonConductorVirtuals, true);
+        }
+
+        // 3. Solve Conducting Spheres (Kelvin Inversion Method of Images)
+        const allExternalForSphere = [...extPointLikes];
+        for (const vp of nonConductorVirtuals) {
+          if (vp.kind === 'point') allExternalForSphere.push(vp);
+          else if (vp.kind === 'cloud') allExternalForSphere.push({ parentId: vp.parentId, x: vp.x, y: vp.y, z: vp.z, q: vp.Q });
+        }
+
+        for (const cond of this.conductors) {
+          let sumQImg = 0;
+          const R = cond.radius;
+          for (const ext of allExternalForSphere) {
+            if (ext.parentId === cond.parentId) continue;
+            if (Math.abs(ext.q) < 1e-6) continue;
+            const dx = ext.x - cond.x;
+            const dy = ext.y - cond.y;
+            const dz = ext.z - cond.z;
+            const d = Math.hypot(dx, dy, dz);
+            if (d <= R + 0.02) continue;
+
+            const qImg = -ext.q * (R / d);
+            const factor = (R * R) / (d * d);
+            const ix = cond.x + dx * factor;
+            const iy = cond.y + dy * factor;
+            const iz = cond.z + dz * factor;
+
+            const imgPrim = {
+              parentId: cond.parentId,
+              kind: 'point',
+              x: ix, y: iy, z: iz,
+              q: qImg,
+              isVirtual: true,
+              insideConductorId: cond.parentId
+            };
+            cond.images.push(imgPrim);
+            sumQImg += qImg;
+          }
+
+          if (cond.condMode === 'V0') {
+            cond.coreQ = (cond.V0 * R) / kEff;
+            cond.surfaceV = cond.V0;
+          } else {
+            cond.coreQ = cond.Q - sumQImg;
+            cond.surfaceV = (kEff * cond.coreQ) / R;
+          }
+
+          // Add sphere core charge & its internal Kelvin images
+          const corePrim = {
+            parentId: cond.parentId,
+            kind: 'point',
+            x: cond.x, y: cond.y, z: cond.z,
+            q: cond.coreQ,
+            isVirtual: false,
+            insideConductorId: cond.parentId
+          };
+          this.primitives.push(corePrim);
+          this._generateBoundaryImages(corePrim, this.imagePrimitives, true);
+          for (const ci of cond.images) {
+            this.primitives.push(ci);
+            this._generateBoundaryImages(ci, this.imagePrimitives, false);
+          }
+        }
+
+        // Append non-conductor boundary images
+        this.imagePrimitives.push(...nonConductorVirtuals);
+      }
+
+      _generateBoundaryImages(p, outList, addGhostMarker) {
+        const b = state.boundary;
+        if (b === 'none') return;
+
+        const makeMirror = (mx, my, mz, sign, flipUx = 1, flipUy = 1, isGhost = true, extra = {}) => {
+          const clone = { ...p, x: mx, y: my, z: mz, isVirtual: true, ...extra };
+          if (p.kind === 'point') clone.q = p.q * sign;
+          else if (p.kind === 'cloud') { clone.Q = p.Q * sign; clone.rho = p.rho * sign; }
+          else if (p.kind === 'perpLine' || p.kind === 'rod') {
+            clone.lambda = p.lambda * sign;
+            clone.ux = (p.ux || 0) * flipUx;
+            clone.uy = (p.uy || 0) * flipUy;
+          }
+          outList.push(clone);
+          if (addGhostMarker && isGhost) {
+            const mag = clone.kind === 'point' ? clone.q : (clone.kind === 'cloud' ? clone.Q : clone.lambda);
+            if (Math.abs(mag) > 1e-4) {
+              this.ghostMarkers.push({
+                kind: clone.kind,
+                x: clone.x, y: clone.y, z: clone.z,
+                q: mag,
+                srcX: p.x, srcY: p.y, srcZ: p.z,
+                ux: clone.ux, uy: clone.uy, length: clone.length, radius: clone.radius
+              });
+            }
+          }
+        };
+
+        if (b === 'plane') {
+          // Mirror across y = 0
+          makeMirror(p.x, -p.y, p.z, -1, 1, -1, true);
+        } else if (b === 'corner') {
+          // Exact 3-image solution
+          makeMirror(-p.x, p.y, p.z, -1, -1, 1, true);
+          makeMirror(p.x, -p.y, p.z, -1, 1, -1, true);
+          makeMirror(-p.x, -p.y, p.z, +1, -1, -1, true);
+        } else if (b === 'parallel') {
+          // For 2D perpendicular line, we use exact conformal analytic expression in evaluate;
+          // still add first 3 nearest ghost markers visually!
+          const h = state.boundaryParam;
+          if (p.kind === 'perpLine') {
+            // Mark analytical conformal flag on physical primitive
+            p.conformalParallel = true;
+            if (addGhostMarker) {
+              for (const m of [-2, -1, 1, 2]) {
+                const odd = Math.abs(m) % 2 === 1;
+                const ym = odd ? (2 * m * h - p.y) : (p.y + 2 * m * h);
+                const sign = odd ? -1 : 1;
+                this.ghostMarkers.push({
+                  kind: 'perpLine', x: p.x, y: ym, z: p.z,
+                  q: p.lambda * sign, srcX: p.x, srcY: p.y, srcZ: p.z
+                });
+              }
+            }
+            return;
+          }
+          // For 3D point/cloud/rod, generate image series m = -10..10 (excluding 0)
+          const M = 10;
+          for (let m = -M; m <= M; m++) {
+            if (m === 0) continue;
+            const odd = Math.abs(m) % 2 === 1;
+            const ym = odd ? (2 * m * h - p.y) : (p.y + 2 * m * h);
+            const sign = odd ? -1 : 1;
+            const flipUy = odd ? -1 : 1;
+            const showGhost = Math.abs(m) <= 2;
+            makeMirror(p.x, ym, p.z, sign, 1, flipUy, showGhost);
+          }
+        } else if (b === 'cavity') {
+          const R = state.boundaryParam;
+          const r2 = p.x * p.x + p.y * p.y + p.z * p.z;
+          const r0 = Math.sqrt(r2);
+          if (p.kind === 'perpLine') {
+            const r2xy = p.x * p.x + p.y * p.y;
+            const r0xy = Math.sqrt(r2xy);
+            if (r0xy < 1e-4) {
+              p.cavityCentered = true;
+            } else {
+              const s = (R * R) / r2xy;
+              p.cavityRefOffset = -TWO_PI_K_NC * p.lambda * Math.log(R / r0xy);
+              makeMirror(p.x * s, p.y * s, p.z, -1, 1, 1, true);
+            }
+          } else if (p.kind === 'point' || p.kind === 'cloud') {
+            if (r0 < 1e-4) {
+              p.cavityCentered = true;
+            } else {
+              const qVal = p.kind === 'point' ? p.q : p.Q;
+              const s = (R * R) / r2;
+              const qImg = -qVal * (R / r0);
+              const clone = {
+                parentId: p.parentId,
+                kind: 'point',
+                x: p.x * s, y: p.y * s, z: p.z * s,
+                q: qImg,
+                isVirtual: true
+              };
+              outList.push(clone);
+              if (addGhostMarker) {
+                this.ghostMarkers.push({
+                  kind: 'point',
+                  x: clone.x, y: clone.y, z: clone.z,
+                  q: clone.q,
+                  srcX: p.x, srcY: p.y, srcZ: p.z
+                });
+              }
+            }
+          } else if (p.kind === 'rod') {
+            // Discretize rod into 7 segments for accurate Kelvin cavity image
+            const N = 7;
+            const dq = (p.lambda * p.length) / N;
+            for (let i = 0; i < N; i++) {
+              const frac = (i + 0.5) / N - 0.5;
+              const sx = p.x + frac * p.length * p.ux;
+              const sy = p.y + frac * p.length * p.uy;
+              const sz = p.z + frac * p.length * (p.uz || 0);
+              const sr2 = sx * sx + sy * sy + sz * sz;
+              const sr = Math.sqrt(sr2);
+              if (sr < 1e-4) continue;
+              const sc = (R * R) / sr2;
+              outList.push({
+                parentId: p.parentId,
+                kind: 'point',
+                x: sx * sc, y: sy * sc, z: sz * sc,
+                q: -dq * (R / sr),
+                isVirtual: true
+              });
+            }
+            if (addGhostMarker && r0 > 1e-4) {
+              const sc = (R * R) / r2;
+              this.ghostMarkers.push({
+                kind: 'point',
+                x: p.x * sc, y: p.y * sc, z: p.z * sc,
+                q: -(p.lambda * p.length) * (R / r0),
+                srcX: p.x, srcY: p.y, srcZ: p.z
+              });
+            }
+          }
+        }
+      }
+
+      // Evaluate field E and potential V at (x, y, z)
+      evaluate(x, y, z, excludeParentId = null, ignoreConductors = false) {
+        const epsR = state.epsilonR;
+        const kEff = K_NC / epsR;
+        const twoPiKEff = TWO_PI_K_NC / epsR;
+
+        // Check grounded walls
+        if (excludeParentId === null && this.isInsideGroundedWall(x, y, z)) {
+          return { Ex: 0, Ey: 0, Ez: 0, E: 0, V: 0, region: 'Grounded Conductor (V = 0)' };
+        }
+
+        // Check conducting sphere interiors
+        if (!ignoreConductors) {
+          for (const cond of this.conductors) {
+            if (cond.parentId === excludeParentId) continue;
+            const dx = x - cond.x;
+            const dy = y - cond.y;
+            const dz = z - cond.z;
+            if (dx * dx + dy * dy + dz * dz < cond.radius * cond.radius) {
+              return { Ex: 0, Ey: 0, Ez: 0, E: 0, V: cond.surfaceV, region: 'Conducting Sphere (E = 0)' };
+            }
+          }
+        }
+
+        let Ex = 0, Ey = 0, Ez = 0, V = 0;
+        let region = 'Free Space';
+
+        const evalPrimList = (list) => {
+          for (let i = 0; i < list.length; i++) {
+            const p = list[i];
+            if (excludeParentId !== null && p.parentId === excludeParentId) continue;
+
+            const dx = x - p.x;
+            const dy = y - p.y;
+            const dz = z - p.z;
+
+            if (p.kind === 'point') {
+              const r2 = dx * dx + dy * dy + dz * dz;
+              const r2Soft = r2 + 0.0016; // soft core ~4cm
+              const r = Math.sqrt(r2Soft);
+              const invR3 = 1.0 / (r2Soft * r);
+              const kq = kEff * p.q;
+              Ex += kq * dx * invR3;
+              Ey += kq * dy * invR3;
+              Ez += kq * dz * invR3;
+              V += kq / r;
+
+              if (p.cavityCentered) {
+                V -= kq / state.boundaryParam;
+              }
+            } else if (p.kind === 'cloud') {
+              const r2 = dx * dx + dy * dy + dz * dz;
+              const r = Math.sqrt(r2);
+              const R = p.radius;
+              const kQ = kEff * p.Q;
+              if (r < R) {
+                // Gauss's Law Interior: E prop to r!
+                const invR3 = 1.0 / (R * R * R);
+                Ex += kQ * dx * invR3;
+                Ey += kQ * dy * invR3;
+                Ez += kQ * dz * invR3;
+                V += (kQ / (2 * R)) * (3 - r2 / (R * R));
+                if (!p.isVirtual) region = 'Inside Cloud (E ∝ r)';
+              } else {
+                const invR3 = 1.0 / (r2 * r);
+                Ex += kQ * dx * invR3;
+                Ey += kQ * dy * invR3;
+                Ez += kQ * dz * invR3;
+                V += kQ / r;
+              }
+              if (p.cavityCentered) {
+                V -= kQ / state.boundaryParam;
+              }
+            } else if (p.kind === 'perpLine') {
+              if (p.conformalParallel) {
+                // Exact analytical conformal map for infinite z-line between y = ±h
+                const h = state.boundaryParam;
+                const a = Math.PI / (2 * h);
+                const ax = a * dx;
+                const ayMinus = a * (y - p.y);
+                const ayPlus = a * (y + p.y);
+                const ch = Math.cosh(ax);
+                const sh = Math.sinh(ax);
+                const cMinus = Math.cos(ayMinus);
+                const sMinus = Math.sin(ayMinus);
+                const cPlus = Math.cos(ayPlus);
+                const sPlus = Math.sin(ayPlus);
+
+                const num = Math.max(1e-8, ch + cPlus);
+                const den = Math.max(1e-8, ch - cMinus);
+                const kl = twoPiKEff * p.lambda * 0.5;
+                V += kl * Math.log(num / den);
+                // E = -grad V
+                Ex += -kl * a * sh * (1 / num - 1 / den);
+                Ey += -kl * a * (-sPlus / num - sMinus / den);
+              } else {
+                const r2xy = dx * dx + dy * dy + 0.0016;
+                const kl = twoPiKEff * p.lambda;
+                Ex += (kl * dx) / r2xy;
+                Ey += (kl * dy) / r2xy;
+                // Reference r=1m (cancels out cleanly with images!)
+                V += -0.5 * kl * Math.log(r2xy);
+                if (p.cavityCentered) {
+                  V += kl * Math.log(state.boundaryParam);
+                } else if (p.cavityRefOffset) {
+                  V += p.cavityRefOffset / epsR;
+                }
+              }
+            } else if (p.kind === 'rod') {
+              // Exact closed-form finite uniformly charged segment
+              const L = p.length;
+              const halfL = 0.5 * L;
+              const ux = p.ux, uy = p.uy, uz = p.uz || 0;
+              // Endpoints a (-L/2) and b (+L/2)
+              const ax = p.x - halfL * ux, ay = p.y - halfL * uy, az = p.z - halfL * uz;
+              const bx = p.x + halfL * ux, by = p.y + halfL * uy, bz = p.z + halfL * uz;
+
+              const rax = x - ax, ray = y - ay, raz = z - az;
+              const rbx = x - bx, rby = y - by, rbz = z - bz;
+
+              const sa = rax * ux + ray * uy + raz * uz;
+              const perpx = rax - sa * ux;
+              const perpy = ray - sa * uy;
+              const perpz = raz - sa * uz;
+
+              // Small soft core perpendicular radius 0.035m
+              const soft2 = 0.0012;
+              const ra = Math.sqrt(rax * rax + ray * ray + raz * raz + soft2);
+              const rb = Math.sqrt(rbx * rbx + rby * rby + rbz * rbz + soft2);
+              const u = ra + rb;
+              const denom = Math.max(1e-5, u * u - L * L);
+
+              const kl = kEff * p.lambda;
+              V += kl * Math.log((u + L) / Math.max(1e-5, u - L));
+
+              const ePar = kl * (1 / rb - 1 / ra);
+              const ePerpFactor = (kl * 2 * L * u) / (denom * ra * rb);
+
+              Ex += ePar * ux + ePerpFactor * perpx;
+              Ey += ePar * uy + ePerpFactor * perpy;
+              Ez += ePar * uz + ePerpFactor * perpz;
+            }
+          }
+        };
+
+        evalPrimList(this.primitives);
+        evalPrimList(this.imagePrimitives);
+
+        return {
+          Ex, Ey, Ez,
+          E: Math.hypot(Ex, Ey, Ez),
+          V,
+          region
+        };
+      }
+
+      // Compute Net Force (in nN) on a user object
+      computeNetForce(obj) {
+        if (obj.type === 'point') {
+          const f = this.evaluate(obj.x, obj.y, obj.z, obj.id);
+          return { Fx: obj.q * f.Ex, Fy: obj.q * f.Ey, Fz: obj.q * f.Ez, unit: 'nN' };
+        } else if (obj.type === 'cloud') {
+          const Q = getCloudTotalCharge(obj);
+          const f = this.evaluate(obj.x, obj.y, obj.z, obj.id);
+          return { Fx: Q * f.Ex, Fy: Q * f.Ey, Fz: Q * f.Ez, unit: 'nN' };
+        } else if (obj.type === 'conductor') {
+          // Force on conducting sphere = sum of forces on internal core + Kelvin images from external fields
+          let Fx = 0, Fy = 0, Fz = 0;
+          for (const p of this.primitives) {
+            if (p.parentId === obj.id && p.kind === 'point') {
+              const f = this.evaluate(p.x, p.y, p.z, obj.id, true);
+              Fx += p.q * f.Ex;
+              Fy += p.q * f.Ey;
+              Fz += p.q * f.Ez;
+            }
+          }
+          return { Fx, Fy, Fz, unit: 'nN' };
+        } else if (obj.type === 'dipole') {
+          const { pos, neg } = getDipolePoles(obj);
+          const fp = this.evaluate(pos.x, pos.y, pos.z, obj.id);
+          const fn = this.evaluate(neg.x, neg.y, neg.z, obj.id);
+          return {
+            Fx: pos.q * fp.Ex + neg.q * fn.Ex,
+            Fy: pos.q * fp.Ey + neg.q * fn.Ey,
+            Fz: pos.q * fp.Ez + neg.q * fn.Ez,
+            unit: 'nN'
+          };
+        } else if (obj.type === 'line') {
+          if (obj.lineMode === 'perp') {
+            const f = this.evaluate(obj.x, obj.y, obj.z, obj.id);
+            return { Fx: obj.lambda * f.Ex, Fy: obj.lambda * f.Ey, Fz: 0, unit: 'nN/m' };
+          } else {
+            // Sample 5 points along finite rod
+            const rad = (obj.angle * Math.PI) / 180;
+            const ux = Math.cos(rad), uy = Math.sin(rad);
+            const N = 5;
+            const dq = (obj.lambda * obj.length) / N;
+            let Fx = 0, Fy = 0, Fz = 0;
+            for (let i = 0; i < N; i++) {
+              const s = ((i + 0.5) / N - 0.5) * obj.length;
+              const f = this.evaluate(obj.x + s * ux, obj.y + s * uy, obj.z, obj.id);
+              Fx += dq * f.Ex;
+              Fy += dq * f.Ey;
+              Fz += dq * f.Ez;
+            }
+            return { Fx, Fy, Fz, unit: 'nN' };
+          }
+        }
+        return { Fx: 0, Fy: 0, Fz: 0, unit: 'nN' };
+      }
+
+      // Adaptive RK4 Streamline Integrator
+      computeStreamlines(is3D, qualityScale = 1.0) {
+        const density = Math.max(6, Math.round(state.streamlineDensity * qualityScale));
+        const qCfg = state.quality === 'high' ? { ds: 0.045, maxSteps: 360 }
+                   : state.quality === 'fast' ? { ds: 0.11, maxSteps: 150 }
+                   : { ds: 0.07, maxSteps: 240 };
+
+        const dsBase = is3D ? qCfg.ds * 1.35 : qCfg.ds;
+        const maxSteps = state.isDragging ? Math.min(130, qCfg.maxSteps) : qCfg.maxSteps;
+        const boundR = is3D ? 6.5 : 10.5;
+
+        // Collect sources & sinks
+        const posSeeds = [];
+        const negSeeds = [];
+        const sinkTargets = [];
+
+        const pushRadialSeeds = (cx, cy, cz, rStart, count, isPos, targetId) => {
+          if (!is3D) {
+            for (let i = 0; i < count; i++) {
+              const a = (i / count) * Math.PI * 2 + 0.07;
+              const seed = { x: cx + rStart * Math.cos(a), y: cy + rStart * Math.sin(a), z: 0, dir: isPos ? 1 : -1, targetId, angle: a };
+              if (isPos) posSeeds.push(seed);
+              else negSeeds.push(seed);
+            }
+          } else {
+            // Cap 3D seeds to avoid clutter
+            const c3d = Math.min(18, Math.max(8, Math.round(count * 0.75)));
+            const golden = Math.PI * (3 - Math.sqrt(5));
+            for (let i = 0; i < c3d; i++) {
+              const y = 1 - (i / Math.max(1, c3d - 1)) * 2;
+              const rad = Math.sqrt(Math.max(0, 1 - y * y));
+              const theta = golden * i;
+              const nx = Math.cos(theta) * rad;
+              const nz = Math.sin(theta) * rad;
+              const ny = y;
+              const seed = { x: cx + rStart * nx, y: cy + rStart * ny, z: cz + rStart * nz, dir: isPos ? 1 : -1, targetId, dirVec: [nx, ny, nz] };
+              if (isPos) posSeeds.push(seed);
+              else negSeeds.push(seed);
+            }
+          }
+        };
+
+        for (const obj of state.objects) {
+          if (obj.type === 'point') {
+            if (Math.abs(obj.q) < 0.02) continue;
+            const isPos = obj.q > 0;
+            const n = Math.max(6, Math.round(density * (0.65 + 0.35 * Math.min(1, Math.abs(obj.q) / 5))));
+            if (!isPos) sinkTargets.push({ id: obj.id, x: obj.x, y: obj.y, z: obj.z, r: 0.17, hits: [] });
+            pushRadialSeeds(obj.x, obj.y, obj.z, 0.21, n, isPos, obj.id);
+          } else if (obj.type === 'dipole') {
+            const { pos, neg } = getDipolePoles(obj);
+            if (pos.q < 0.02) continue;
+            const n = Math.max(6, Math.round(density * 0.85));
+            sinkTargets.push({ id: obj.id + '_neg', x: neg.x, y: neg.y, z: neg.z, r: 0.16, hits: [] });
+            pushRadialSeeds(pos.x, pos.y, pos.z, 0.19, n, true, obj.id);
+            pushRadialSeeds(neg.x, neg.y, neg.z, 0.19, n, false, obj.id + '_neg');
+          } else if (obj.type === 'cloud') {
+            const Q = getCloudTotalCharge(obj);
+            if (Math.abs(Q) < 0.05) continue;
+            const isPos = Q > 0;
+            const n = Math.max(6, Math.round(density * 0.9));
+            if (!isPos) sinkTargets.push({ id: obj.id, x: obj.x, y: obj.y, z: obj.z, r: 0.18, hits: [] });
+            // Seed right at cloud surface (shows radial interior if we also trace inward? Actually trace outward from 0.22 inside!)
+            pushRadialSeeds(obj.x, obj.y, obj.z, 0.22, n, isPos, obj.id);
+          } else if (obj.type === 'conductor') {
+            const cond = this.conductors.find(c => c.parentId === obj.id);
+            if (!cond) continue;
+            const rSeed = cond.radius + 0.05;
+            const n = Math.max(8, density);
+            // Conductors can absorb AND emit lines if induced! Probe surface normal flux
+            const probePoints = [];
+            if (!is3D) {
+              for (let i = 0; i < n; i++) {
+                const a = (i / n) * Math.PI * 2 + 0.05;
+                probePoints.push([cond.x + rSeed * Math.cos(a), cond.y + rSeed * Math.sin(a), 0, Math.cos(a), Math.sin(a), 0, a]);
+              }
+            } else {
+              const c3d = Math.min(18, n);
+              const golden = Math.PI * (3 - Math.sqrt(5));
+              for (let i = 0; i < c3d; i++) {
+                const py = 1 - (i / Math.max(1, c3d - 1)) * 2;
+                const rad = Math.sqrt(Math.max(0, 1 - py * py));
+                const th = golden * i;
+                const nx = Math.cos(th) * rad, nz = Math.sin(th) * rad;
+                probePoints.push([cond.x + rSeed * nx, cond.y + rSeed * py, cond.z + rSeed * nz, nx, py, nz, th]);
+              }
+            }
+            sinkTargets.push({ id: obj.id, x: cond.x, y: cond.y, z: cond.z, r: cond.radius + 0.03, hits: [] });
+            for (const [px, py, pz, nx, ny, nz, a] of probePoints) {
+              const f = this.evaluate(px, py, pz);
+              const flux = f.Ex * nx + f.Ey * ny + f.Ez * nz;
+              if (flux > 0.05) posSeeds.push({ x: px, y: py, z: pz, dir: 1, targetId: obj.id, angle: a });
+              else if (flux < -0.05) negSeeds.push({ x: px, y: py, z: pz, dir: -1, targetId: obj.id, angle: a, dirVec: [nx, ny, nz] });
+            }
+          } else if (obj.type === 'line') {
+            if (Math.abs(obj.lambda) < 0.02) continue;
+            const isPos = obj.lambda > 0;
+            if (obj.lineMode === 'perp') {
+              const n = Math.max(6, Math.round(density * 0.9));
+              if (!isPos) sinkTargets.push({ id: obj.id, x: obj.x, y: obj.y, z: obj.z, r: 0.16, isPerpLine: true, hits: [] });
+              if (!is3D) {
+                pushRadialSeeds(obj.x, obj.y, 0, 0.2, n, isPos, obj.id);
+              } else {
+                const zSlices = [-2.0, 0.0, 2.0];
+                const perRing = Math.min(10, Math.max(6, Math.round(n * 0.55)));
+                for (const zs of zSlices) {
+                  for (let i = 0; i < perRing; i++) {
+                    const a = (i / perRing) * Math.PI * 2 + 0.1;
+                    const seed = { x: obj.x + 0.22 * Math.cos(a), y: obj.y + 0.22 * Math.sin(a), z: zs, dir: isPos ? 1 : -1, targetId: obj.id, dirVec: [Math.cos(a), Math.sin(a), 0] };
+                    if (isPos) posSeeds.push(seed);
+                    else negSeeds.push(seed);
+                  }
+                }
+              }
+            } else {
+              // Finite rod: seed along both sides + ends
+              const rad = (obj.angle * Math.PI) / 180;
+              const ux = Math.cos(rad), uy = Math.sin(rad);
+              const px = -uy, py = ux;
+              const segs = Math.max(4, Math.round(density * 0.45));
+              for (let i = 0; i < segs; i++) {
+                const s = ((i + 0.5) / segs - 0.5) * obj.length * 0.88;
+                const sx = obj.x + s * ux, sy = obj.y + s * uy;
+                if (!is3D) {
+                  for (const side of [-1, 1]) {
+                    const seed = { x: sx + side * 0.18 * px, y: sy + side * 0.18 * py, z: 0, dir: isPos ? 1 : -1, targetId: obj.id };
+                    if (isPos) posSeeds.push(seed); else negSeeds.push(seed);
+                  }
+                } else {
+                  for (let k = 0; k < 4; k++) {
+                    const phi = (k / 4) * Math.PI * 2 + 0.3;
+                    const ox = Math.cos(phi) * px, oy = Math.cos(phi) * py, oz = Math.sin(phi);
+                    const seed = { x: sx + 0.18 * ox, y: sy + 0.18 * oy, z: obj.z + 0.18 * oz, dir: isPos ? 1 : -1, targetId: obj.id };
+                    if (isPos) posSeeds.push(seed); else negSeeds.push(seed);
+                  }
+                }
+              }
+              // Tip seeds
+              for (const end of [-1, 1]) {
+                const ex = obj.x + end * (obj.length * 0.5 + 0.16) * ux;
+                const ey = obj.y + end * (obj.length * 0.5 + 0.16) * uy;
+                const seed = { x: ex, y: ey, z: obj.z, dir: isPos ? 1 : -1, targetId: obj.id };
+                if (isPos) posSeeds.push(seed); else negSeeds.push(seed);
+              }
+              if (!isPos) sinkTargets.push({ id: obj.id, x: obj.x, y: obj.y, z: obj.z, r: 0.16, isRod: true, ux, uy, length: obj.length, hits: [] });
+            }
+          }
+        }
+
+        const lines = [];
+
+        const hitSinkCheck = (px, py, pz, recordHit) => {
+          for (const st of sinkTargets) {
+            if (st.isPerpLine) {
+              const dx = px - st.x, dy = py - st.y;
+              if (dx * dx + dy * dy <= st.r * st.r) {
+                if (recordHit) {
+                  const len = Math.hypot(dx, dy) || 1;
+                  st.hits.push({ ang: Math.atan2(dy, dx), nx: dx / len, ny: dy / len, nz: 0 });
+                }
+                return st;
+              }
+            } else if (st.isRod) {
+              const dx = px - st.x, dy = py - st.y, dz = pz - st.z;
+              const proj = Math.max(-st.length * 0.5, Math.min(st.length * 0.5, dx * st.ux + dy * st.uy));
+              const cx = st.x + proj * st.ux, cy = st.y + proj * st.uy, cz = st.z;
+              const d2 = (px - cx) ** 2 + (py - cy) ** 2 + (pz - cz) ** 2;
+              if (d2 <= st.r * st.r) return st;
+            } else {
+              const dx = px - st.x, dy = py - st.y, dz = pz - st.z;
+              const d2 = dx * dx + dy * dy + dz * dz;
+              if (d2 <= st.r * st.r) {
+                if (recordHit) {
+                  const len = Math.sqrt(d2) || 1;
+                  st.hits.push({ ang: Math.atan2(dy, dx), nx: dx / len, ny: dy / len, nz: dz / len });
+                }
+                return st;
+              }
+            }
+          }
+          // Also check positive point charges / dipole pos / clouds if tracing backward
+          if (!recordHit) {
+            for (const obj of state.objects) {
+              if (obj.type === 'point' && obj.q > 0) {
+                if ((px - obj.x) ** 2 + (py - obj.y) ** 2 + (pz - obj.z) ** 2 <= 0.16 * 0.16) return true;
+              } else if (obj.type === 'dipole') {
+                const { pos } = getDipolePoles(obj);
+                if ((px - pos.x) ** 2 + (py - pos.y) ** 2 + (pz - pos.z) ** 2 <= 0.15 * 0.15) return true;
+              } else if (obj.type === 'cloud' && obj.rho > 0) {
+                if ((px - obj.x) ** 2 + (py - obj.y) ** 2 + (pz - obj.z) ** 2 <= 0.16 * 0.16) return true;
+              } else if (obj.type === 'conductor') {
+                if ((px - obj.x) ** 2 + (py - obj.y) ** 2 + (pz - obj.z) ** 2 <= (obj.radius + 0.025) ** 2) return true;
+              } else if (obj.type === 'line' && obj.lambda > 0) {
+                if (obj.lineMode === 'perp') {
+                  if ((px - obj.x) ** 2 + (py - obj.y) ** 2 <= 0.16 * 0.16) return true;
+                } else {
+                  const rad = (obj.angle * Math.PI) / 180, ux = Math.cos(rad), uy = Math.sin(rad);
+                  const dx = px - obj.x, dy = py - obj.y, dz = pz - obj.z;
+                  const proj = Math.max(-obj.length * 0.5, Math.min(obj.length * 0.5, dx * ux + dy * uy));
+                  if ((px - (obj.x + proj * ux)) ** 2 + (py - (obj.y + proj * uy)) ** 2 + dz * dz <= 0.15 * 0.15) return true;
+                }
+              }
+            }
+          }
+          return null;
+        };
+
+        const traceLine = (seed, recordForwardHits) => {
+          if (this.isInsideGroundedWall(seed.x, seed.y, seed.z)) return null;
+          let x = seed.x, y = seed.y, z = seed.z;
+          const dir = seed.dir;
+          const pts = [];
+          const mags = [];
+
+          const unitDir = (px, py, pz) => {
+            const f = this.evaluate(px, py, pz);
+            if (f.E < 1e-5) return null;
+            return { x: (dir * f.Ex) / f.E, y: (dir * f.Ey) / f.E, z: (dir * f.Ez) / f.E, E: f.E };
+          };
+
+          for (let step = 0; step < maxSteps; step++) {
+            const k1 = unitDir(x, y, z);
+            if (!k1) break;
+            pts.push([x, y, z]);
+            mags.push(k1.E);
+
+            // Adaptive step based on proximity/field strength
+            const ds = Math.min(dsBase * 1.4, Math.max(dsBase * 0.45, dsBase * (1.2 / (1 + 0.08 * Math.sqrt(k1.E)))));
+
+            const k2 = unitDir(x + 0.5 * ds * k1.x, y + 0.5 * ds * k1.y, z + 0.5 * ds * k1.z);
+            if (!k2) break;
+            const k3 = unitDir(x + 0.5 * ds * k2.x, y + 0.5 * ds * k2.y, z + 0.5 * ds * k2.z);
+            if (!k3) break;
+            const k4 = unitDir(x + ds * k3.x, y + ds * k3.y, z + ds * k3.z);
+            if (!k4) break;
+
+            const nx = x + (ds / 6) * (k1.x + 2 * k2.x + 2 * k3.x + k4.x);
+            const ny = y + (ds / 6) * (k1.y + 2 * k2.y + 2 * k3.y + k4.y);
+            const nz = z + (ds / 6) * (k1.z + 2 * k2.z + 2 * k3.z + k4.z);
+
+            if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nz)) break;
+
+            // Check wall hit
+            if (this.isInsideGroundedWall(nx, ny, nz)) {
+              // Binary snap closer to wall
+              const mx = 0.5 * (x + nx), my = 0.5 * (y + ny), mz = 0.5 * (z + nz);
+              pts.push([mx, my, mz]);
+              mags.push(k1.E);
+              break;
+            }
+
+            if (Math.abs(nx) > boundR || Math.abs(ny) > boundR || Math.abs(nz) > boundR) {
+              pts.push([nx, ny, nz]);
+              mags.push(k1.E);
+              break;
+            }
+
+            const hit = hitSinkCheck(nx, ny, nz, recordForwardHits);
+            if (hit) {
+              pts.push([nx, ny, nz]);
+              mags.push(k1.E);
+              break;
+            }
+
+            x = nx; y = ny; z = nz;
+          }
+
+          if (pts.length < 2) return null;
+          // Reverse backward traces so arrow directions ALWAYS follow +E!
+          if (dir < 0) {
+            pts.reverse();
+            mags.reverse();
+          }
+          return { pts, mags };
+        };
+
+        // Pass 1: Forward from positive sources
+        for (const seed of posSeeds) {
+          const line = traceLine(seed, true);
+          if (line) lines.push(line);
+        }
+
+        // Pass 2: Backward from negative sources, skipping directions already hit by Pass 1
+        const minGap = (Math.PI * 1.15) / Math.max(6, density);
+        for (const seed of negSeeds) {
+          const target = sinkTargets.find(st => st.id === seed.targetId);
+          if (target && target.hits.length > 0) {
+            let covered = false;
+            if (!is3D && seed.angle !== undefined) {
+              for (const h of target.hits) {
+                let diff = Math.abs(seed.angle - h.ang) % (Math.PI * 2);
+                if (diff > Math.PI) diff = Math.PI * 2 - diff;
+                if (diff < minGap) { covered = true; break; }
+              }
+            } else if (is3D && seed.dirVec) {
+              const [vx, vy, vz] = seed.dirVec;
+              for (const h of target.hits) {
+                const dot = vx * h.nx + vy * h.ny + vz * h.nz;
+                if (dot > 0.90) { covered = true; break; }
+              }
+            }
+            if (covered) continue;
+          }
+          const line = traceLine(seed, false);
+          if (line) lines.push(line);
+        }
+
+        // Enforce 3D cap for visual clarity
+        if (is3D && lines.length > 90) {
+          return lines.slice(0, 90);
+        }
+        return lines;
+      }
+
+      // Compute potential grid on an arbitrary slice plane
+      computeSliceGrid(nx, ny, xMin, xMax, yMin, yMax, axis = 'xy', slicePos = 0) {
+        const vals = new Float32Array(nx * ny);
+        for (let j = 0; j < ny; j++) {
+          const v = yMin + (j / (ny - 1)) * (yMax - yMin);
+          for (let i = 0; i < nx; i++) {
+            const u = xMin + (i / (nx - 1)) * (xMax - xMin);
+            let x, y, z;
+            if (axis === 'xy') { x = u; y = v; z = slicePos; }
+            else if (axis === 'xz') { x = u; y = slicePos; z = v; }
+            else { x = slicePos; y = u; z = v; }
+            vals[j * nx + i] = this.evaluate(x, y, z).V;
+          }
+        }
+        return vals;
+      }
+
+      // Marching Squares for Equipotential Contours
+      extractContours(vals, nx, ny, xMin, xMax, yMin, yMax, levels) {
+        const dx = (xMax - xMin) / (nx - 1);
+        const dy = (yMax - yMin) / (ny - 1);
+        const result = [];
+
+        const interp = (a, b, va, vb, iso) => {
+          const d = vb - va;
+          if (Math.abs(d) < 1e-9) return 0.5;
+          return Math.max(0, Math.min(1, (iso - va) / d));
+        };
+
+        for (const iso of levels) {
+          const segs = [];
+          for (let j = 0; j < ny - 1; j++) {
+            const y0 = yMin + j * dy;
+            const y1 = y0 + dy;
+            const row0 = j * nx;
+            const row1 = (j + 1) * nx;
+            for (let i = 0; i < nx - 1; i++) {
+              const v0 = vals[row0 + i];     // bl
+              const v1 = vals[row0 + i + 1]; // br
+              const v2 = vals[row1 + i + 1]; // tr
+              const v3 = vals[row1 + i];     // tl
+
+              const mask = (v0 >= iso ? 1 : 0) | (v1 >= iso ? 2 : 0) | (v2 >= iso ? 4 : 0) | (v3 >= iso ? 8 : 0);
+              if (mask === 0 || mask === 15) continue;
+
+              const x0 = xMin + i * dx;
+              const x1 = x0 + dx;
+
+              const pt = (edge) => {
+                if (edge === 0) { const t = interp(0, 1, v0, v1, iso); return [x0 + t * dx, y0]; }
+                if (edge === 1) { const t = interp(1, 2, v1, v2, iso); return [x1, y0 + t * dy]; }
+                if (edge === 2) { const t = interp(3, 2, v3, v2, iso); return [x0 + t * dx, y1]; }
+                const t = interp(0, 3, v0, v3, iso); return [x0, y0 + t * dy];
+              };
+
+              switch (mask) {
+                case 1: case 14: segs.push([pt(3), pt(0)]); break;
+                case 2: case 13: segs.push([pt(0), pt(1)]); break;
+                case 3: case 12: segs.push([pt(3), pt(1)]); break;
+                case 4: case 11: segs.push([pt(1), pt(2)]); break;
+                case 6: case 9:  segs.push([pt(0), pt(2)]); break;
+                case 7: case 8:  segs.push([pt(3), pt(2)]); break;
+                case 5: {
+                  const avg = 0.25 * (v0 + v1 + v2 + v3);
+                  if (avg >= iso) { segs.push([pt(3), pt(2)]); segs.push([pt(0), pt(1)]); }
+                  else { segs.push([pt(3), pt(0)]); segs.push([pt(1), pt(2)]); }
+                  break;
+                }
+                case 10: {
+                  const avg = 0.25 * (v0 + v1 + v2 + v3);
+                  if (avg >= iso) { segs.push([pt(3), pt(0)]); segs.push([pt(1), pt(2)]); }
+                  else { segs.push([pt(3), pt(2)]); segs.push([pt(0), pt(1)]); }
+                  break;
+                }
+              }
+            }
+          }
+          if (segs.length > 0) result.push({ iso, segs });
+        }
+        return result;
+      }
+
+      // Marching Tetrahedra for 3D Equipotential Surfaces
+      extractIsoSurface3D(iso, N = 24, range = 4.2) {
+        const total = N * N * N;
+        const vals = new Float32Array(total);
+        const step = (2 * range) / (N - 1);
+
+        for (let k = 0; k < N; k++) {
+          const z = -range + k * step;
+          for (let j = 0; j < N; j++) {
+            const y = -range + j * step;
+            for (let i = 0; i < N; i++) {
+              const x = -range + i * step;
+              vals[k * N * N + j * N + i] = this.evaluate(x, y, z).V;
+            }
+          }
+        }
+
+        // 6 Kuhn tetrahedra around diagonal 0->6
+        const TETS = [
+          [0, 1, 2, 6],
+          [0, 1, 5, 6],
+          [0, 3, 2, 6],
+          [0, 3, 7, 6],
+          [0, 4, 5, 6],
+          [0, 4, 7, 6]
+        ];
+        const CORNER_OFF = [
+          [0,0,0], [1,0,0], [1,1,0], [0,1,0],
+          [0,0,1], [1,0,1], [1,1,1], [0,1,1]
+        ];
+
+        const positions = [];
+        const normals = [];
+        const interpVert = (a, b, va, vb) => {
+          const d = vb - va;
+          const t = Math.abs(d) < 1e-8 ? 0.5 : Math.max(0, Math.min(1, (iso - va) / d));
+          return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])];
+        };
+
+        const pushTri = (p0, p1, p2) => {
+          // Analytic smooth normal from -E (or grad V)
+          const f0 = this.evaluate(p0[0], p0[1], p0[2]);
+          const f1 = this.evaluate(p1[0], p1[1], p1[2]);
+          const f2 = this.evaluate(p2[0], p2[1], p2[2]);
+          const norm = (f) => {
+            const len = f.E || 1;
+            const s = iso >= 0 ? 1 : -1;
+            return [(s * f.Ex) / len, (s * f.Ey) / len, (s * f.Ez) / len];
+          };
+          const n0 = norm(f0), n1 = norm(f1), n2 = norm(f2);
+          positions.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]);
+          normals.push(n0[0], n0[1], n0[2], n1[0], n1[1], n1[2], n2[0], n2[1], n2[2]);
+        };
+
+        for (let k = 0; k < N - 1; k++) {
+          for (let j = 0; j < N - 1; j++) {
+            for (let i = 0; i < N - 1; i++) {
+              const cPos = [];
+              const cVal = [];
+              let anyAbove = false, anyBelow = false;
+              for (let c = 0; c < 8; c++) {
+                const [ox, oy, oz] = CORNER_OFF[c];
+                const idx = (k + oz) * N * N + (j + oy) * N + (i + ox);
+                const v = vals[idx];
+                if (v >= iso) anyAbove = true; else anyBelow = true;
+                cVal.push(v);
+                cPos.push([-range + (i + ox) * step, -range + (j + oy) * step, -range + (k + oz) * step]);
+              }
+              if (!anyAbove || !anyBelow) continue;
+
+              for (const tet of TETS) {
+                const ins = [];
+                const outs = [];
+                for (let m = 0; m < 4; m++) {
+                  const ci = tet[m];
+                  if (cVal[ci] >= iso) ins.push(ci); else outs.push(ci);
+                }
+                if (ins.length === 0 || outs.length === 0) continue;
+
+                if (ins.length === 1) {
+                  const a = ins[0];
+                  const p0 = interpVert(cPos[a], cPos[outs[0]], cVal[a], cVal[outs[0]]);
+                  const p1 = interpVert(cPos[a], cPos[outs[1]], cVal[a], cVal[outs[1]]);
+                  const p2 = interpVert(cPos[a], cPos[outs[2]], cVal[a], cVal[outs[2]]);
+                  pushTri(p0, p1, p2);
+                } else if (ins.length === 3) {
+                  const a = outs[0];
+                  const p0 = interpVert(cPos[a], cPos[ins[0]], cVal[a], cVal[ins[0]]);
+                  const p1 = interpVert(cPos[a], cPos[ins[1]], cVal[a], cVal[ins[1]]);
+                  const p2 = interpVert(cPos[a], cPos[ins[2]], cVal[a], cVal[ins[2]]);
+                  pushTri(p0, p2, p1);
+                } else {
+                  const [a, b] = ins;
+                  const [c, d] = outs;
+                  const p0 = interpVert(cPos[a], cPos[c], cVal[a], cVal[c]);
+                  const p1 = interpVert(cPos[a], cPos[d], cVal[a], cVal[d]);
+                  const p2 = interpVert(cPos[b], cPos[c], cVal[b], cVal[c]);
+                  const p3 = interpVert(cPos[b], cPos[d], cVal[b], cVal[d]);
+                  pushTri(p0, p1, p2);
+                  pushTri(p1, p3, p2);
+                }
+              }
+            }
+          }
+        }
+        return { positions: new Float32Array(positions), normals: new Float32Array(normals) };
+      }
+    }
+
+    const physics = new PhysicsEngine();
+
+    // =========================================================
+    // 2D HIGH-DPI CANVAS RENDERER
+    // =========================================================
+    class Renderer2D {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.offCanvas = document.createElement('canvas');
+        this.offCtx = this.offCanvas.getContext('2d');
+        this.cachedLines = [];
+        this.cachedContours = [];
+        this.cachedHeatmapValid = false;
+        this.dpr = 1;
+        this.width = 0;
+        this.height = 0;
+      }
+
+      resize() {
+        this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = Math.round(this.width * this.dpr);
+        this.canvas.height = Math.round(this.height * this.dpr);
+        this.cachedHeatmapValid = false;
+        state.dirtyHeatmap = true;
+      }
+
+      worldToScreen(wx, wy) {
+        const { cx, cy, scale } = state.view2D;
+        return {
+          sx: this.width * 0.5 + (wx - cx) * scale,
+          sy: this.height * 0.5 - (wy - cy) * scale
+        };
+      }
+
+      screenToWorld(sx, sy) {
+        const { cx, cy, scale } = state.view2D;
+        return {
+          x: cx + (sx - this.width * 0.5) / scale,
+          y: cy - (sy - this.height * 0.5) / scale
+        };
+      }
+
+      getWorldBounds() {
+        const tl = this.screenToWorld(0, 0);
+        const br = this.screenToWorld(this.width, this.height);
+        return { xMin: tl.x, xMax: br.x, yMin: br.y, yMax: tl.y };
+      }
+
+      recomputeFieldData() {
+        const bounds = this.getWorldBounds();
+        if (state.showFieldLines && state.dirtyFieldLines) {
+          const qScale = state.isDragging ? 0.65 : 1.0;
+          this.cachedLines = physics.computeStreamlines(false, qScale);
+          state.dirtyFieldLines = false;
+        }
+
+        if ((state.showHeatmap || state.showEquipotentials) && (state.dirtyHeatmap || !this.cachedHeatmapValid)) {
+          const nx = state.isDragging ? 86 : 150;
+          const aspect = this.height / Math.max(1, this.width);
+          const ny = Math.max(40, Math.round(nx * aspect));
+          const vals = physics.computeSliceGrid(nx, ny, bounds.xMin, bounds.xMax, bounds.yMin, bounds.yMax, 'xy', 0);
+
+          if (state.showHeatmap) {
+            this.offCanvas.width = nx;
+            this.offCanvas.height = ny;
+            const img = this.offCtx.createImageData(nx, ny);
+            const data = img.data;
+            for (let j = 0; j < ny; j++) {
+              // Flip Y for canvas image coordinates
+              const srcRow = (ny - 1 - j) * nx;
+              const dstRow = j * nx;
+              for (let i = 0; i < nx; i++) {
+                const V = vals[srcRow + i];
+                const u = normalizeV(V);
+                const [r, g, b] = samplePotentialColor(u);
+                const k = (dstRow + i) * 4;
+                data[k] = r;
+                data[k + 1] = g;
+                data[k + 2] = b;
+                data[k + 3] = 225;
+              }
+            }
+            this.offCtx.putImageData(img, 0, 0);
+            this.cachedHeatmapValid = true;
+          }
+
+          if (state.showEquipotentials) {
+            const levels = [-60, -35, -20, -12, -7, -4, -2, -0.8, 0, 0.8, 2, 4, 7, 12, 20, 35, 60];
+            this.cachedContours = physics.extractContours(vals, nx, ny, bounds.xMin, bounds.xMax, bounds.yMin, bounds.yMax, levels);
+          } else {
+            this.cachedContours = [];
+          }
+          state.dirtyHeatmap = false;
+        }
+      }
+
+      render() {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.scale(this.dpr, this.dpr);
+
+        // Background
+        ctx.fillStyle = '#0B0F19';
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        this.recomputeFieldData();
+
+        // 1. Potential Heatmap
+        if (state.showHeatmap && this.cachedHeatmapValid) {
+          ctx.save();
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(this.offCanvas, 0, 0, this.width, this.height);
+          ctx.restore();
+        }
+
+        // 2. Subtle Coordinate Grid
+        this.drawGrid(ctx);
+
+        // 3. Equipotential Contours
+        if (state.showEquipotentials && this.cachedContours.length > 0) {
+          this.drawContours(ctx);
+        }
+
+        // 4. Vector Arrow Grid
+        if (state.showVectorGrid) {
+          this.drawVectorGrid(ctx);
+        }
+
+        // 5. Electric Field Streamlines
+        if (state.showFieldLines) {
+          this.drawStreamlines(ctx);
+        }
+
+        // 6. Grounded Conducting Boundaries
+        this.drawBoundaries(ctx);
+
+        // 7. Virtual Image Ghost Charges
+        if (state.boundary !== 'none' && state.showVirtualImages) {
+          this.drawGhostMarkers(ctx);
+        }
+
+        // 8. Placed Physical Objects
+        this.drawObjects(ctx);
+
+        // 9. Net Force Vectors
+        if (state.showForceVectors) {
+          this.drawForceVectors(ctx);
+        }
+
+        // 10. Test Charge Particles
+        this.drawParticles(ctx);
+
+        // 11. Interactive Probe
+        if (state.probeActive) {
+          this.drawProbe(ctx);
+        }
+
+        ctx.restore();
+      }
+
+      drawGrid(ctx) {
+        const bounds = this.getWorldBounds();
+        const step = state.gridSpacing;
+        const pxStep = step * state.view2D.scale;
+        const drawStep = pxStep < 18 ? step * 2 : step;
+
+        const xStart = Math.floor(bounds.xMin / drawStep) * drawStep;
+        const yStart = Math.floor(bounds.yMin / drawStep) * drawStep;
+
+        ctx.lineWidth = 1;
+        for (let x = xStart; x <= bounds.xMax; x += drawStep) {
+          const { sx } = this.worldToScreen(x, 0);
+          const isAxis = Math.abs(x) < 1e-4;
+          ctx.strokeStyle = isAxis ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.035)';
+          ctx.beginPath();
+          ctx.moveTo(sx, 0);
+          ctx.lineTo(sx, this.height);
+          ctx.stroke();
+        }
+        for (let y = yStart; y <= bounds.yMax; y += drawStep) {
+          const { sy } = this.worldToScreen(0, y);
+          const isAxis = Math.abs(y) < 1e-4;
+          ctx.strokeStyle = isAxis ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.035)';
+          ctx.beginPath();
+          ctx.moveTo(0, sy);
+          ctx.lineTo(this.width, sy);
+          ctx.stroke();
+        }
+      }
+
+      drawContours(ctx) {
+        ctx.lineWidth = 1;
+        for (const group of this.cachedContours) {
+          const iso = group.iso;
+          if (Math.abs(iso) < 1e-5) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.setLineDash([4, 4]);
+          } else if (iso > 0) {
+            ctx.strokeStyle = 'rgba(253, 224, 71, 0.24)';
+            ctx.setLineDash([]);
+          } else {
+            ctx.strokeStyle = 'rgba(103, 232, 249, 0.24)';
+            ctx.setLineDash([]);
+          }
+          ctx.beginPath();
+          for (const [a, b] of group.segs) {
+            const p0 = this.worldToScreen(a[0], a[1]);
+            const p1 = this.worldToScreen(b[0], b[1]);
+            ctx.moveTo(p0.sx, p0.sy);
+            ctx.lineTo(p1.sx, p1.sy);
+          }
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+
+      drawVectorGrid(ctx) {
+        const bounds = this.getWorldBounds();
+        const spacing = 0.65;
+        const x0 = Math.floor(bounds.xMin / spacing) * spacing;
+        const y0 = Math.floor(bounds.yMin / spacing) * spacing;
+
+        for (let y = y0; y <= bounds.yMax; y += spacing) {
+          for (let x = x0; x <= bounds.xMax; x += spacing) {
+            if (physics.isInsideGroundedWall(x, y, 0)) continue;
+            const f = physics.evaluate(x, y, 0);
+            if (f.E < 0.02) continue;
+
+            const t = normalizeEMag(f.E);
+            const alpha = 0.25 + 0.65 * t;
+            const len = 10 + 14 * t;
+            const ux = f.Ex / f.E;
+            const uy = -f.Ey / f.E; // screen y inverted
+
+            const { sx, sy } = this.worldToScreen(x, y);
+            const ex = sx + ux * len * 0.5;
+            const ey = sy + uy * len * 0.5;
+            const bx = sx - ux * len * 0.5;
+            const by = sy - uy * len * 0.5;
+
+            ctx.strokeStyle = plasmaCSS(t, alpha);
+            ctx.fillStyle = plasmaCSS(t, alpha);
+            ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+
+            // Small arrowhead
+            const ang = Math.atan2(uy, ux);
+            ctx.beginPath();
+            ctx.moveTo(ex, ey);
+            ctx.lineTo(ex - 5 * Math.cos(ang - 0.5), ey - 5 * Math.sin(ang - 0.5));
+            ctx.lineTo(ex - 5 * Math.cos(ang + 0.5), ey - 5 * Math.sin(ang + 0.5));
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+
+      drawStreamlines(ctx) {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        for (const line of this.cachedLines) {
+          const { pts, mags } = line;
+          if (pts.length < 2) continue;
+
+          // Average magnitude coloring in segments for rich plasma gradient
+          const stepChunk = 6;
+          ctx.lineWidth = 1.45;
+          for (let i = 0; i < pts.length - 1; i += stepChunk) {
+            const endIdx = Math.min(pts.length - 1, i + stepChunk);
+            const t = normalizeEMag(mags[Math.min(mags.length - 1, i + 2)]);
+            ctx.strokeStyle = plasmaCSS(t, 0.42 + 0.45 * t);
+            ctx.beginPath();
+            const s0 = this.worldToScreen(pts[i][0], pts[i][1]);
+            ctx.moveTo(s0.sx, s0.sy);
+            for (let k = i + 1; k <= endIdx; k++) {
+              const sk = this.worldToScreen(pts[k][0], pts[k][1]);
+              ctx.lineTo(sk.sx, sk.sy);
+            }
+            ctx.stroke();
+          }
+
+          // Directional chevron halfway along line (if long enough)
+          if (pts.length > 8) {
+            const mid = Math.floor(pts.length * 0.5);
+            const pA = this.worldToScreen(pts[mid - 1][0], pts[mid - 1][1]);
+            const pB = this.worldToScreen(pts[mid + 1][0], pts[mid + 1][1]);
+            const dx = pB.sx - pA.sx, dy = pB.sy - pA.sy;
+            const len = Math.hypot(dx, dy);
+            if (len > 1.5) {
+              const ang = Math.atan2(dy, dx);
+              const t = normalizeEMag(mags[mid]);
+              ctx.fillStyle = plasmaCSS(t, 0.85);
+              ctx.beginPath();
+              ctx.moveTo(pB.sx + 2 * Math.cos(ang), pB.sy + 2 * Math.sin(ang));
+              ctx.lineTo(pB.sx - 6 * Math.cos(ang - 0.55), pB.sy - 6 * Math.sin(ang - 0.55));
+              ctx.lineTo(pB.sx - 6 * Math.cos(ang + 0.55), pB.sy - 6 * Math.sin(ang + 0.55));
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      drawBoundaries(ctx) {
+        const b = state.boundary;
+        if (b === 'none') return;
+
+        ctx.save();
+        if (b === 'plane') {
+          const { sy } = this.worldToScreen(0, 0);
+          // Grounded region below y = 0
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+          ctx.fillRect(0, sy, this.width, this.height - sy);
+
+          // Metallic hatching
+          ctx.strokeStyle = 'rgba(52, 211, 153, 0.14)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let x = -this.height; x < this.width + this.height; x += 18) {
+            ctx.moveTo(x, sy);
+            ctx.lineTo(x - 16, sy + 16);
+          }
+          ctx.stroke();
+
+          // Conducting surface edge
+          ctx.strokeStyle = '#34D399';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(0, sy);
+          ctx.lineTo(this.width, sy);
+          ctx.stroke();
+
+          this.drawTag(ctx, this.width - 110, sy + 18, 'GROUND (V = 0)', '#34D399');
+        } else if (b === 'corner') {
+          const origin = this.worldToScreen(0, 0);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+          ctx.fillRect(0, 0, origin.sx, this.height);
+          ctx.fillRect(origin.sx, origin.sy, this.width - origin.sx, this.height - origin.sy);
+
+          ctx.strokeStyle = '#34D399';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(origin.sx, 0);
+          ctx.lineTo(origin.sx, origin.sy);
+          ctx.lineTo(this.width, origin.sy);
+          ctx.stroke();
+
+          this.drawTag(ctx, origin.sx - 68, origin.sy + 20, 'V = 0 CORNER', '#34D399');
+        } else if (b === 'parallel') {
+          const h = state.boundaryParam;
+          const top = this.worldToScreen(0, h);
+          const bot = this.worldToScreen(0, -h);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.74)';
+          ctx.fillRect(0, 0, this.width, top.sy);
+          ctx.fillRect(0, bot.sy, this.width, this.height - bot.sy);
+
+          ctx.strokeStyle = '#34D399';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(0, top.sy); ctx.lineTo(this.width, top.sy);
+          ctx.moveTo(0, bot.sy); ctx.lineTo(this.width, bot.sy);
+          ctx.stroke();
+
+          this.drawTag(ctx, this.width - 95, top.sy - 14, 'PLATE V = 0', '#34D399');
+          this.drawTag(ctx, this.width - 95, bot.sy + 18, 'PLATE V = 0', '#34D399');
+        } else if (b === 'cavity') {
+          const R = state.boundaryParam;
+          const c = this.worldToScreen(0, 0);
+          const rPx = R * state.view2D.scale;
+
+          // Shade outside circle
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.74)';
+          ctx.beginPath();
+          ctx.rect(0, 0, this.width, this.height);
+          ctx.arc(c.sx, c.sy, rPx, 0, Math.PI * 2, true);
+          ctx.fill();
+
+          ctx.strokeStyle = '#34D399';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(c.sx, c.sy, rPx, 0, Math.PI * 2);
+          ctx.stroke();
+
+          this.drawTag(ctx, c.sx, c.sy - rPx - 14, 'GROUNDED CAVITY (V = 0)', '#34D399');
+        }
+        ctx.restore();
+      }
+
+      drawGhostMarkers(ctx) {
+        ctx.save();
+        for (const g of physics.ghostMarkers) {
+          const pos = this.worldToScreen(g.x, g.y);
+          const src = this.worldToScreen(g.srcX, g.srcY);
+          const isPos = g.q >= 0;
+          const col = isPos ? 'rgba(251, 113, 133, 0.65)' : 'rgba(56, 189, 248, 0.65)';
+
+          // Faint mirror tether line
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(src.sx, src.sy);
+          ctx.lineTo(pos.sx, pos.sy);
+          ctx.stroke();
+
+          // Dashed ghost circle
+          ctx.strokeStyle = col;
+          ctx.fillStyle = isPos ? 'rgba(244, 63, 94, 0.12)' : 'rgba(14, 165, 233, 0.12)';
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.arc(pos.sx, pos.sy, 11, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.setLineDash([]);
+          ctx.fillStyle = col;
+          ctx.font = '600 10px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(isPos ? '+' : '−', pos.sx, pos.sy + 0.5);
+
+          if (state.showReadouts) {
+            ctx.font = '500 9px "JetBrains Mono", monospace';
+            ctx.fillStyle = 'rgba(203, 213, 225, 0.65)';
+            ctx.fillText(`img ${g.q >= 0 ? '+' : ''}${g.q.toFixed(1)}`, pos.sx, pos.sy + 20);
+          }
+        }
+        ctx.restore();
+      }
+
+      drawObjects(ctx) {
+        for (const obj of state.objects) {
+          const isSel = obj.id === state.selectedId;
+          const p = this.worldToScreen(obj.x, obj.y);
+
+          if (obj.type === 'point') {
+            this.drawPointDisc(ctx, p.sx, p.sy, obj.q, isSel, obj.locked);
+            if (state.showReadouts) {
+              this.drawTag(ctx, p.sx, p.sy - 22, `${obj.q >= 0 ? '+' : ''}${obj.q.toFixed(1)} nC`, obj.q >= 0 ? '#FDA4AF' : '#7DD3FC');
+            }
+          } else if (obj.type === 'cloud') {
+            const rPx = obj.radius * state.view2D.scale;
+            const isPos = obj.rho >= 0;
+            const grad = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, rPx);
+            if (isPos) {
+              grad.addColorStop(0, 'rgba(251, 146, 60, 0.34)');
+              grad.addColorStop(1, 'rgba(244, 63, 94, 0.08)');
+            } else {
+              grad.addColorStop(0, 'rgba(56, 189, 248, 0.34)');
+              grad.addColorStop(1, 'rgba(14, 165, 233, 0.08)');
+            }
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(p.sx, p.sy, rPx, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = isSel ? '#F8FAFC' : (isPos ? 'rgba(251, 146, 60, 0.7)' : 'rgba(56, 189, 248, 0.7)');
+            ctx.lineWidth = isSel ? 2 : 1.3;
+            ctx.setLineDash([5, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            if (state.showReadouts) {
+              const Q = getCloudTotalCharge(obj);
+              this.drawTag(ctx, p.sx, p.sy - rPx - 12, `ρ=${obj.rho.toFixed(2)} · Q=${Q >= 0 ? '+' : ''}${Q.toFixed(1)}nC`, '#FCD34D');
+            }
+          } else if (obj.type === 'conductor') {
+            const rPx = obj.radius * state.view2D.scale;
+            const cond = physics.conductors.find(c => c.parentId === obj.id);
+            const grad = ctx.createRadialGradient(p.sx - rPx * 0.28, p.sy - rPx * 0.28, rPx * 0.1, p.sx, p.sy, rPx);
+            grad.addColorStop(0, '#94A3B8');
+            grad.addColorStop(0.55, '#475569');
+            grad.addColorStop(1, '#1E293B');
+
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(p.sx, p.sy, rPx, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = isSel ? '#38BDF8' : 'rgba(226, 232, 240, 0.55)';
+            ctx.lineWidth = isSel ? 2.5 : 1.5;
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            ctx.font = '600 9px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('E = 0', p.sx, p.sy + 3);
+
+            if (state.showReadouts && cond) {
+              this.drawTag(ctx, p.sx, p.sy - rPx - 12, `V=${cond.surfaceV.toFixed(1)}V · Q=${obj.condMode === 'Q' ? obj.Q.toFixed(1) : cond.coreQ.toFixed(1)}nC`, '#E2E8F0');
+            }
+          } else if (obj.type === 'line') {
+            const isPos = obj.lambda >= 0;
+            if (obj.lineMode === 'perp') {
+              const col = isPos ? '#FB7185' : '#38BDF8';
+              ctx.fillStyle = isPos ? 'rgba(244,63,94,0.22)' : 'rgba(14,165,233,0.22)';
+              ctx.strokeStyle = isSel ? '#FFFFFF' : col;
+              ctx.lineWidth = isSel ? 2.5 : 2;
+              ctx.beginPath();
+              ctx.arc(p.sx, p.sy, 14, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+
+              // ⊙ or ⊗ icon indicating perpendicular z-line
+              ctx.fillStyle = col;
+              if (isPos) {
+                ctx.beginPath();
+                ctx.arc(p.sx, p.sy, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+              } else {
+                ctx.beginPath();
+                ctx.moveTo(p.sx - 5, p.sy - 5); ctx.lineTo(p.sx + 5, p.sy + 5);
+                ctx.moveTo(p.sx + 5, p.sy - 5); ctx.lineTo(p.sx - 5, p.sy + 5);
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 1.8;
+                ctx.stroke();
+              }
+              if (state.showReadouts) {
+                this.drawTag(ctx, p.sx, p.sy - 24, `λ=${obj.lambda >= 0 ? '+' : ''}${obj.lambda.toFixed(1)} nC/m`, col);
+              }
+            } else {
+              const rad = (obj.angle * Math.PI) / 180;
+              const half = obj.length * 0.5;
+              const p0 = this.worldToScreen(obj.x - half * Math.cos(rad), obj.y - half * Math.sin(rad));
+              const p1 = this.worldToScreen(obj.x + half * Math.cos(rad), obj.y + half * Math.sin(rad));
+
+              if (isSel) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.lineWidth = 11;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(p0.sx, p0.sy); ctx.lineTo(p1.sx, p1.sy);
+                ctx.stroke();
+              }
+              ctx.strokeStyle = isPos ? '#F43F5E' : '#0EA5E9';
+              ctx.lineWidth = 7;
+              ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.moveTo(p0.sx, p0.sy); ctx.lineTo(p1.sx, p1.sy);
+              ctx.stroke();
+
+              if (state.showReadouts) {
+                this.drawTag(ctx, p.sx, p.sy - 18, `λ=${obj.lambda >= 0 ? '+' : ''}${obj.lambda.toFixed(1)} nC/m`, isPos ? '#FDA4AF' : '#7DD3FC');
+              }
+            }
+          } else if (obj.type === 'dipole') {
+            const { pos, neg } = getDipolePoles(obj);
+            const sp = this.worldToScreen(pos.x, pos.y);
+            const sn = this.worldToScreen(neg.x, neg.y);
+
+            // Connector bond
+            ctx.strokeStyle = isSel ? 'rgba(255,255,255,0.65)' : 'rgba(148,163,184,0.45)';
+            ctx.lineWidth = isSel ? 3.5 : 2.5;
+            ctx.beginPath();
+            ctx.moveTo(sn.sx, sn.sy);
+            ctx.lineTo(sp.sx, sp.sy);
+            ctx.stroke();
+
+            this.drawPointDisc(ctx, sp.sx, sp.sy, pos.q, isSel, false, 11);
+            this.drawPointDisc(ctx, sn.sx, sn.sy, neg.q, isSel, false, 11);
+
+            if (state.showReadouts) {
+              this.drawTag(ctx, p.sx, p.sy - 20, `p=±${Math.abs(obj.q).toFixed(1)}nC`, '#CBD5E1');
+            }
+          }
+        }
+      }
+
+      drawPointDisc(ctx, sx, sy, q, isSel, locked, r = 13) {
+        const isPos = q >= 0;
+        // Soft glow
+        const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, r * 2.1);
+        glow.addColorStop(0, isPos ? 'rgba(244, 63, 94, 0.45)' : 'rgba(14, 165, 233, 0.45)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (isSel) {
+          ctx.strokeStyle = '#F8FAFC';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(sx, sy, r + 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        const disc = ctx.createRadialGradient(sx - r * 0.3, sy - r * 0.3, 1, sx, sy, r);
+        if (isPos) {
+          disc.addColorStop(0, '#FDA4AF');
+          disc.addColorStop(0.6, '#F43F5E');
+          disc.addColorStop(1, '#9F1239');
+        } else {
+          disc.addColorStop(0, '#A5F3FC');
+          disc.addColorStop(0.6, '#0EA5E9');
+          disc.addColorStop(1, '#0369A1');
+        }
+        ctx.fillStyle = disc;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '700 12px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.abs(q) < 0.05 ? '0' : (isPos ? '+' : '−'), sx, sy + 0.5);
+
+        if (locked) {
+          ctx.fillStyle = '#FBBF24';
+          ctx.beginPath();
+          ctx.arc(sx + r * 0.85, sy - r * 0.85, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      drawForceVectors(ctx) {
+        for (const obj of state.objects) {
+          const F = physics.computeNetForce(obj);
+          const mag = Math.hypot(F.Fx, F.Fy);
+          if (mag < 0.05) continue;
+
+          const p = this.worldToScreen(obj.x, obj.y);
+          const len = Math.min(110, 22 + 22 * Math.log1p(mag * 0.15));
+          const ux = F.Fx / mag;
+          const uy = -F.Fy / mag;
+          const ex = p.sx + ux * len;
+          const ey = p.sy + uy * len;
+
+          ctx.save();
+          ctx.strokeStyle = '#34D399';
+          ctx.fillStyle = '#34D399';
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(p.sx, p.sy);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+
+          const ang = Math.atan2(uy, ux);
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - 9 * Math.cos(ang - 0.45), ey - 9 * Math.sin(ang - 0.45));
+          ctx.lineTo(ex - 9 * Math.cos(ang + 0.45), ey - 9 * Math.sin(ang + 0.45));
+          ctx.closePath();
+          ctx.fill();
+
+          if (state.showReadouts) {
+            this.drawTag(ctx, ex + ux * 14, ey + uy * 14, `F=${fmtForce(mag)}`, '#6EE7B7');
+          }
+          ctx.restore();
+        }
+      }
+
+      drawParticles(ctx) {
+        for (const pt of state.particles) {
+          // Trail
+          if (pt.trail.length > 1) {
+            ctx.beginPath();
+            const s0 = this.worldToScreen(pt.trail[0][0], pt.trail[0][1]);
+            ctx.moveTo(s0.sx, s0.sy);
+            for (let i = 1; i < pt.trail.length; i++) {
+              const si = this.worldToScreen(pt.trail[i][0], pt.trail[i][1]);
+              ctx.lineTo(si.sx, si.sy);
+            }
+            ctx.strokeStyle = pt.q >= 0 ? 'rgba(251, 113, 133, 0.55)' : 'rgba(56, 189, 248, 0.55)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+          const sp = this.worldToScreen(pt.x, pt.y);
+          ctx.fillStyle = pt.q >= 0 ? '#FDA4AF' : '#7DD3FC';
+          ctx.beginPath();
+          ctx.arc(sp.sx, sp.sy, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      drawProbe(ctx) {
+        const p = this.worldToScreen(state.probePos.x, state.probePos.y);
+        const f = physics.evaluate(state.probePos.x, state.probePos.y, 0);
+
+        ctx.save();
+        // Local E arrow at probe
+        if (f.E > 0.05) {
+          const len = Math.min(54, 14 + 14 * normalizeEMag(f.E));
+          const ux = f.Ex / f.E, uy = -f.Ey / f.E;
+          const ex = p.sx + ux * len, ey = p.sy + uy * len;
+          ctx.strokeStyle = '#FDE047';
+          ctx.fillStyle = '#FDE047';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(p.sx, p.sy); ctx.lineTo(ex, ey);
+          ctx.stroke();
+          const ang = Math.atan2(uy, ux);
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - 7 * Math.cos(ang - 0.5), ey - 7 * Math.sin(ang - 0.5));
+          ctx.lineTo(ex - 7 * Math.cos(ang + 0.5), ey - 7 * Math.sin(ang + 0.5));
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Reticle
+        ctx.strokeStyle = '#34D399';
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(p.sx - 16, p.sy); ctx.lineTo(p.sx - 6, p.sy);
+        ctx.moveTo(p.sx + 6, p.sy); ctx.lineTo(p.sx + 16, p.sy);
+        ctx.moveTo(p.sx, p.sy - 16); ctx.lineTo(p.sx, p.sy - 6);
+        ctx.moveTo(p.sx, p.sy + 6); ctx.lineTo(p.sx, p.sy + 16);
+        ctx.stroke();
+
+        ctx.fillStyle = '#A7F3D0';
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      drawTag(ctx, sx, sy, text, color) {
+        ctx.save();
+        ctx.font = '500 10px "JetBrains Mono", monospace';
+        const w = ctx.measureText(text).width + 10;
+        ctx.fillStyle = 'rgba(11, 15, 25, 0.78)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(sx - w * 0.5, sy - 8, w, 16, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, sx, sy + 0.5);
+        ctx.restore();
+      }
+    }
+
+    // =========================================================
+    // 3D THREE.JS RENDERER (Anti-Clutter + Slice Plane)
+    // =========================================================
+    class Renderer3D {
+      constructor(container) {
+        this.container = container;
+        this.initialized = false;
+        this.raycaster = new THREE.Raycaster();
+        this.pointerNDC = new THREE.Vector2();
+        this.dragPlane = new THREE.Plane();
+        this.dragOffset = new THREE.Vector3();
+        this.dragTarget = null; // { kind: 'object' | 'probe', id }
+        this.pickables = [];
+      }
+
+      init() {
+        if (this.initialized) return;
+        this.initialized = true;
+
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color('#0B0F19');
+
+        const w = window.innerWidth, h = window.innerHeight;
+        this.camera = new THREE.PerspectiveCamera(46, w / h, 0.1, 120);
+        this.camera.position.set(6.5, 5.2, 8.2);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        this.renderer.setSize(w, h);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.container.appendChild(this.renderer.domElement);
+
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.07;
+        this.controls.minDistance = 2.5;
+        this.controls.maxDistance = 30;
+
+        // Lighting
+        const amb = new THREE.AmbientLight(0xdbeafe, 0.75);
+        const dir1 = new THREE.DirectionalLight(0xffffff, 1.15);
+        dir1.position.set(8, 12, 10);
+        const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.45);
+        dir2.position.set(-8, -6, -6);
+        this.scene.add(amb, dir1, dir2);
+
+        // Subtle reference grid
+        this.gridHelper = new THREE.GridHelper(12, 24, 0x334155, 0x162033);
+        this.gridHelper.position.y = -0.01;
+        this.gridHelper.material.transparent = true;
+        this.gridHelper.material.opacity = 0.45;
+        this.scene.add(this.gridHelper);
+
+        // Groups
+        this.objectsGroup = new THREE.Group();
+        this.boundaryGroup = new THREE.Group();
+        this.ghostGroup = new THREE.Group();
+        this.linesGroup = new THREE.Group();
+        this.vectorGroup = new THREE.Group();
+        this.isoGroup = new THREE.Group();
+        this.forceGroup = new THREE.Group();
+        this.particlesGroup = new THREE.Group();
+        this.sliceGroup = new THREE.Group();
+        this.probeGroup = new THREE.Group();
+
+        this.scene.add(
+          this.boundaryGroup,
+          this.sliceGroup,
+          this.isoGroup,
+          this.linesGroup,
+          this.vectorGroup,
+          this.ghostGroup,
+          this.objectsGroup,
+          this.forceGroup,
+          this.particlesGroup,
+          this.probeGroup
+        );
+
+        // Offscreen canvas for crisp 2D Cross-Section Slice Plane
+        this.sliceCanvas = document.createElement('canvas');
+        this.sliceCanvas.width = 256;
+        this.sliceCanvas.height = 256;
+        this.sliceCtx = this.sliceCanvas.getContext('2d');
+        this.sliceTex = new THREE.CanvasTexture(this.sliceCanvas);
+        this.sliceTex.minFilter = THREE.LinearFilter;
+        this.sliceTex.magFilter = THREE.LinearFilter;
+
+        const sliceGeo = new THREE.PlaneGeometry(9.0, 9.0);
+        const sliceMat = new THREE.MeshBasicMaterial({
+          map: this.sliceTex,
+          transparent: true,
+          opacity: 0.78,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        this.sliceMesh = new THREE.Mesh(sliceGeo, sliceMat);
+        const frameEdges = new THREE.EdgesGeometry(sliceGeo);
+        this.sliceFrame = new THREE.LineSegments(
+          frameEdges,
+          new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45 })
+        );
+        this.sliceMesh.add(this.sliceFrame);
+        this.sliceGroup.add(this.sliceMesh);
+
+        // Probe 3D Marker
+        this.probeSphere = new THREE.Mesh(
+          new THREE.SphereGeometry(0.14, 18, 18),
+          new THREE.MeshBasicMaterial({ color: 0x34d399 })
+        );
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.2, 0.24, 32),
+          new THREE.MeshBasicMaterial({ color: 0x34d399, side: THREE.DoubleSide })
+        );
+        this.probeSphere.add(ring);
+        this.probeSphere.userData = { pickKind: 'probe' };
+        this.probeArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.7, 0xfde047, 0.18, 0.1);
+        this.probeGroup.add(this.probeSphere, this.probeArrow);
+
+        this._bindPointerEvents();
+      }
+
+      resize() {
+        if (!this.initialized) return;
+        const w = window.innerWidth, h = window.innerHeight;
+        this.camera.aspect = w / h;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w, h);
+      }
+
+      setCameraPreset(preset) {
+        if (!this.initialized) return;
+        this.controls.target.set(0, 0, 0);
+        if (preset === 'top') this.camera.position.set(0, 11.5, 0.01);
+        else if (preset === 'front') this.camera.position.set(0, 0.5, 11.5);
+        else if (preset === 'side') this.camera.position.set(11.5, 0.5, 0);
+        else this.camera.position.set(6.5, 5.2, 8.2);
+        this.controls.update();
+      }
+
+      _clearGroup(group) {
+        while (group.children.length > 0) {
+          const child = group.children.pop();
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      }
+
+      rebuildObjects() {
+        this._clearGroup(this.objectsGroup);
+        this._clearGroup(this.ghostGroup);
+        this._clearGroup(this.boundaryGroup);
+        this._clearGroup(this.forceGroup);
+        this.pickables = [];
+
+        // 1. Grounded Boundaries
+        const b = state.boundary;
+        const wallMat = new THREE.MeshPhysicalMaterial({
+          color: 0x10b981,
+          transparent: true,
+          opacity: 0.14,
+          roughness: 0.3,
+          metalness: 0.4,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        const wireMat = new THREE.LineBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.45 });
+
+        const addPlane = (px, py, pz, rx, ry, rz, w = 10, h = 10) => {
+          const geo = new THREE.PlaneGeometry(w, h);
+          const mesh = new THREE.Mesh(geo, wallMat.clone());
+          mesh.position.set(px, py, pz);
+          mesh.rotation.set(rx, ry, rz);
+          const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geo), wireMat.clone());
+          mesh.add(edge);
+          this.boundaryGroup.add(mesh);
+        };
+
+        if (b === 'plane') {
+          addPlane(0, 0, 0, -Math.PI / 2, 0, 0, 11, 11);
+        } else if (b === 'corner') {
+          addPlane(5, 0, 0, -Math.PI / 2, 0, 0, 10, 10);
+          addPlane(0, 5, 0, 0, Math.PI / 2, 0, 10, 10);
+        } else if (b === 'parallel') {
+          const h = state.boundaryParam;
+          addPlane(0, h, 0, -Math.PI / 2, 0, 0, 10, 10);
+          addPlane(0, -h, 0, -Math.PI / 2, 0, 0, 10, 10);
+        } else if (b === 'cavity') {
+          const R = state.boundaryParam;
+          const sGeo = new THREE.SphereGeometry(R, 32, 24);
+          const sMesh = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({
+            color: 0x34d399, wireframe: true, transparent: true, opacity: 0.16
+          }));
+          this.boundaryGroup.add(sMesh);
+        }
+
+        // 2. Virtual Image Ghost Charges
+        if (b !== 'none' && state.showVirtualImages) {
+          for (const g of physics.ghostMarkers) {
+            const isPos = g.q >= 0;
+            const ghostGeo = new THREE.SphereGeometry(0.16, 16, 16);
+            const ghostMat = new THREE.MeshBasicMaterial({
+              color: isPos ? 0xfb7185 : 0x38bdf8,
+              wireframe: true,
+              transparent: true,
+              opacity: 0.45
+            });
+            const m = new THREE.Mesh(ghostGeo, ghostMat);
+            m.position.set(g.x, g.y, g.z || 0);
+            this.ghostGroup.add(m);
+
+            // Mirror tether
+            const tetherGeo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(g.srcX, g.srcY, g.srcZ || 0),
+              new THREE.Vector3(g.x, g.y, g.z || 0)
+            ]);
+            const tether = new THREE.Line(tetherGeo, new THREE.LineDashedMaterial({
+              color: 0x94a3b8, dashSize: 0.15, gapSize: 0.12, transparent: true, opacity: 0.25
+            }));
+            tether.computeLineDistances();
+            this.ghostGroup.add(tether);
+          }
+        }
+
+        // 3. Placed Objects
+        for (const obj of state.objects) {
+          const isSel = obj.id === state.selectedId;
+          const group = new THREE.Group();
+          group.position.set(obj.x, obj.y, obj.z);
+
+          if (obj.type === 'point') {
+            const isPos = obj.q >= 0;
+            const mat = new THREE.MeshStandardMaterial({
+              color: isPos ? 0xf43f5e : 0x0ea5e9,
+              emissive: isPos ? 0x9f1239 : 0x0369a1,
+              emissiveIntensity: 0.55,
+              roughness: 0.25,
+              metalness: 0.15
+            });
+            const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 24), mat);
+            mesh.userData = { pickKind: 'object', id: obj.id };
+            group.add(mesh);
+            this.pickables.push(mesh);
+          } else if (obj.type === 'cloud') {
+            const isPos = obj.rho >= 0;
+            const mat = new THREE.MeshPhysicalMaterial({
+              color: isPos ? 0xf59e0b : 0x38bdf8,
+              transparent: true,
+              opacity: 0.28,
+              roughness: 0.35,
+              depthWrite: false
+            });
+            const mesh = new THREE.Mesh(new THREE.SphereGeometry(obj.radius, 28, 22), mat);
+            const wire = new THREE.Mesh(
+              new THREE.SphereGeometry(obj.radius, 16, 12),
+              new THREE.MeshBasicMaterial({ color: isPos ? 0xfbbf24 : 0x7dd3fc, wireframe: true, transparent: true, opacity: 0.22 })
+            );
+            mesh.userData = { pickKind: 'object', id: obj.id };
+            group.add(mesh, wire);
+            this.pickables.push(mesh);
+          } else if (obj.type === 'conductor') {
+            const mat = new THREE.MeshStandardMaterial({
+              color: 0xcbd5e1,
+              roughness: 0.18,
+              metalness: 0.88
+            });
+            const mesh = new THREE.Mesh(new THREE.SphereGeometry(obj.radius, 32, 24), mat);
+            mesh.userData = { pickKind: 'object', id: obj.id };
+            group.add(mesh);
+            this.pickables.push(mesh);
+          } else if (obj.type === 'line') {
+            const isPos = obj.lambda >= 0;
+            const len = obj.lineMode === 'perp' ? 8.0 : obj.length;
+            const cyl = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.08, 0.08, len, 16),
+              new THREE.MeshStandardMaterial({
+                color: isPos ? 0xf43f5e : 0x0ea5e9,
+                emissive: isPos ? 0x881337 : 0x075985,
+                emissiveIntensity: 0.5
+              })
+            );
+            if (obj.lineMode === 'perp') {
+              cyl.rotation.x = Math.PI / 2; // along Z
+            } else {
+              cyl.rotation.z = ((obj.angle - 90) * Math.PI) / 180;
+            }
+            cyl.userData = { pickKind: 'object', id: obj.id };
+            group.add(cyl);
+            this.pickables.push(cyl);
+          } else if (obj.type === 'dipole') {
+            const { u } = getDipolePoles(obj);
+            const half = obj.separation * 0.5;
+            const posM = new THREE.Mesh(
+              new THREE.SphereGeometry(0.18, 20, 20),
+              new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0x9f1239, emissiveIntensity: 0.5 })
+            );
+            posM.position.set(half * u.x, half * u.y, half * u.z);
+            const negM = new THREE.Mesh(
+              new THREE.SphereGeometry(0.18, 20, 20),
+              new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0369a1, emissiveIntensity: 0.5 })
+            );
+            negM.position.set(-half * u.x, -half * u.y, -half * u.z);
+            const rod = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.04, 0.04, obj.separation, 10),
+              new THREE.MeshStandardMaterial({ color: 0x94a3b8 })
+            );
+            rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(u.x, u.y, u.z));
+            posM.userData = { pickKind: 'object', id: obj.id };
+            negM.userData = { pickKind: 'object', id: obj.id };
+            rod.userData = { pickKind: 'object', id: obj.id };
+            group.add(rod, posM, negM);
+            this.pickables.push(posM, negM, rod);
+          }
+
+          if (isSel) {
+            const rHalo = (obj.type === 'cloud' || obj.type === 'conductor') ? obj.radius + 0.14 : 0.36;
+            const halo = new THREE.Mesh(
+              new THREE.RingGeometry(rHalo, rHalo + 0.04, 32),
+              new THREE.MeshBasicMaterial({ color: 0xf8fafc, side: THREE.DoubleSide })
+            );
+            halo.rotation.x = Math.PI / 2;
+            group.add(halo);
+          }
+
+          this.objectsGroup.add(group);
+
+          // Force Vector Arrow
+          if (state.showForceVectors) {
+            const F = physics.computeNetForce(obj);
+            const mag = Math.hypot(F.Fx, F.Fy, F.Fz);
+            if (mag > 0.05) {
+              const dir = new THREE.Vector3(F.Fx / mag, F.Fy / mag, F.Fz / mag);
+              const len = Math.min(2.6, 0.6 + 0.5 * Math.log1p(mag * 0.15));
+              const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(obj.x, obj.y, obj.z), len, 0x34d399, 0.24, 0.14);
+              this.forceGroup.add(arrow);
+            }
+          }
+        }
+      }
+
+      rebuildFieldLines() {
+        this._clearGroup(this.linesGroup);
+        if (!state.showFieldLines) return;
+
+        const qScale = state.isDragging ? 0.55 : 0.85;
+        const lines = physics.computeStreamlines(true, qScale);
+
+        for (const line of lines) {
+          const { pts, mags } = line;
+          if (pts.length < 2) continue;
+          const positions = new Float32Array(pts.length * 3);
+          const colors = new Float32Array(pts.length * 3);
+          let avgE = 0;
+
+          for (let i = 0; i < pts.length; i++) {
+            positions[i * 3] = pts[i][0];
+            positions[i * 3 + 1] = pts[i][1];
+            positions[i * 3 + 2] = pts[i][2];
+            const t = normalizeEMag(mags[i]);
+            avgE += t;
+            const [r, g, b] = samplePlasma(t);
+            colors[i * 3] = r / 255;
+            colors[i * 3 + 1] = g / 255;
+            colors[i * 3 + 2] = b / 255;
+          }
+          avgE /= pts.length;
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+          const mat = new THREE.LineBasicMaterial({
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.38 + 0.45 * avgE,
+            depthWrite: false
+          });
+          const lObj = new THREE.Line(geo, mat);
+          lObj.userData = { baseOpacity: 0.38 + 0.45 * avgE, midPoint: new THREE.Vector3(...pts[Math.floor(pts.length / 2)]) };
+          this.linesGroup.add(lObj);
+        }
+      }
+
+      rebuildVectorGrid() {
+        this._clearGroup(this.vectorGroup);
+        if (!state.showVectorGrid) return;
+
+        const coords = [-3.0, -1.5, 0, 1.5, 3.0];
+        for (const z of coords) {
+          for (const y of coords) {
+            for (const x of coords) {
+              if (physics.isInsideGroundedWall(x, y, z)) continue;
+              const f = physics.evaluate(x, y, z);
+              if (f.E < 0.08) continue;
+              const t = normalizeEMag(f.E);
+              const [r, g, b] = samplePlasma(t);
+              const colHex = (r << 16) | (g << 8) | b;
+              const dir = new THREE.Vector3(f.Ex / f.E, f.Ey / f.E, f.Ez / f.E);
+              const len = 0.38 + 0.42 * t;
+              const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(x, y, z), len, colHex, 0.16, 0.09);
+              arrow.line.material.transparent = true;
+              arrow.cone.material.transparent = true;
+              const baseOp = 0.28 + 0.55 * t;
+              arrow.line.material.opacity = baseOp;
+              arrow.cone.material.opacity = baseOp;
+              arrow.userData = { baseOpacity: baseOp };
+              this.vectorGroup.add(arrow);
+            }
+          }
+        }
+      }
+
+      rebuildIsoSurfaces() {
+        this._clearGroup(this.isoGroup);
+        if (!state.showEquipotentials || state.objects.length === 0) return;
+
+        const isoLevels = state.isDragging ? [10, -10] : [22, 8, -8, -22];
+        const N = state.isDragging ? 18 : 24;
+        for (const iso of isoLevels) {
+          const { positions, normals } = physics.extractIsoSurface3D(iso, N, 4.2);
+          if (positions.length === 0) continue;
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+          const isPos = iso > 0;
+          const mat = new THREE.MeshPhysicalMaterial({
+            color: isPos ? 0xfbbf24 : 0x38bdf8,
+            transparent: true,
+            opacity: 0.14,
+            roughness: 0.35,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          });
+          this.isoGroup.add(new THREE.Mesh(geo, mat));
+        }
+      }
+
+      updateSlicePlane() {
+        this.sliceGroup.visible = state.sliceEnabled;
+        if (!state.sliceEnabled) return;
+
+        const axis = state.sliceAxis;
+        const pos = state.slicePos;
+        if (axis === 'xy') {
+          this.sliceMesh.rotation.set(0, 0, 0);
+          this.sliceMesh.position.set(0, 0, pos);
+        } else if (axis === 'xz') {
+          this.sliceMesh.rotation.set(-Math.PI / 2, 0, 0);
+          this.sliceMesh.position.set(0, pos, 0);
+        } else {
+          this.sliceMesh.rotation.set(0, Math.PI / 2, 0);
+          this.sliceMesh.position.set(pos, 0, 0);
+        }
+
+        const nx = state.isDragging ? 72 : 128;
+        const ny = nx;
+        const range = 4.5;
+        const vals = physics.computeSliceGrid(nx, ny, -range, range, -range, range, axis, pos);
+
+        this.sliceCanvas.width = nx;
+        this.sliceCanvas.height = ny;
+        const img = this.sliceCtx.createImageData(nx, ny);
+        const data = img.data;
+        for (let j = 0; j < ny; j++) {
+          const srcRow = (ny - 1 - j) * nx;
+          const dstRow = j * nx;
+          for (let i = 0; i < nx; i++) {
+            const V = vals[srcRow + i];
+            const u = normalizeV(V);
+            const [r, g, b] = samplePotentialColor(u);
+            const k = (dstRow + i) * 4;
+            data[k] = r; data[k + 1] = g; data[k + 2] = b;
+            data[k + 3] = Math.abs(u) < 0.03 ? 85 : 210;
+          }
+        }
+        this.sliceCtx.putImageData(img, 0, 0);
+
+        // Draw crisp equipotential contour rings directly on the slice texture!
+        if (state.showEquipotentials) {
+          const levels = [-40, -18, -8, -3, 0, 3, 8, 18, 40];
+          const contours = physics.extractContours(vals, nx, ny, -range, range, -range, range, levels);
+          this.sliceCtx.lineWidth = 1.0;
+          for (const g of contours) {
+            this.sliceCtx.strokeStyle = Math.abs(g.iso) < 1e-4 ? 'rgba(255,255,255,0.45)' : (g.iso > 0 ? 'rgba(253,224,71,0.55)' : 'rgba(103,232,249,0.55)');
+            this.sliceCtx.beginPath();
+            for (const [a, b] of g.segs) {
+              const ax = ((a[0] + range) / (2 * range)) * nx;
+              const ay = (1 - (a[1] + range) / (2 * range)) * ny;
+              const bx = ((b[0] + range) / (2 * range)) * nx;
+              const by = (1 - (b[1] + range) / (2 * range)) * ny;
+              this.sliceCtx.moveTo(ax, ay);
+              this.sliceCtx.lineTo(bx, by);
+            }
+            this.sliceCtx.stroke();
+          }
+        }
+        this.sliceTex.needsUpdate = true;
+      }
+
+      updateProbe() {
+        this.probeGroup.visible = state.probeActive;
+        if (!state.probeActive) return;
+        const p = state.probePos;
+        this.probeSphere.position.set(p.x, p.y, p.z);
+        this.probeSphere.children[0].lookAt(this.camera.position);
+
+        const f = physics.evaluate(p.x, p.y, p.z);
+        if (f.E > 0.05) {
+          this.probeArrow.visible = true;
+          this.probeArrow.position.set(p.x, p.y, p.z);
+          this.probeArrow.setDirection(new THREE.Vector3(f.Ex / f.E, f.Ey / f.E, f.Ez / f.E));
+          this.probeArrow.setLength(0.45 + 0.65 * normalizeEMag(f.E), 0.16, 0.09);
+        } else {
+          this.probeArrow.visible = false;
+        }
+      }
+
+      updateParticles() {
+        this._clearGroup(this.particlesGroup);
+        for (const pt of state.particles) {
+          const col = pt.q >= 0 ? 0xfda4af : 0x7dd3fc;
+          const sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.1, 12, 12),
+            new THREE.MeshBasicMaterial({ color: col })
+          );
+          sphere.position.set(pt.x, pt.y, pt.z);
+          this.particlesGroup.add(sphere);
+
+          if (pt.trail.length > 1) {
+            const pts3 = pt.trail.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+            const geo = new THREE.BufferGeometry().setFromPoints(pts3);
+            this.particlesGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.6 })));
+          }
+        }
+      }
+
+      // Smart Depth & Distance Culling per frame
+      applyDepthAttenuation() {
+        const camPos = this.camera.position;
+        for (const arrow of this.vectorGroup.children) {
+          const dist = camPos.distanceTo(arrow.position);
+          const fade = Math.max(0.12, Math.min(1.0, 1.35 - dist * 0.065));
+          const op = (arrow.userData.baseOpacity || 0.6) * fade;
+          arrow.line.material.opacity = op;
+          arrow.cone.material.opacity = op;
+        }
+        for (const line of this.linesGroup.children) {
+          if (!line.userData.midPoint) continue;
+          const dist = camPos.distanceTo(line.userData.midPoint);
+          const fade = Math.max(0.22, Math.min(1.0, 1.35 - dist * 0.055));
+          line.material.opacity = line.userData.baseOpacity * fade;
+        }
+      }
+
+      _updatePointerNDC(clientX, clientY) {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        this.pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      }
+
+      _bindPointerEvents() {
+        const el = this.renderer.domElement;
+
+        el.addEventListener('pointerdown', (e) => {
+          if (state.mode !== '3d' || e.button !== 0) return;
+          this._updatePointerNDC(e.clientX, e.clientY);
+          this.raycaster.setFromCamera(this.pointerNDC, this.camera);
+
+          // Test Launcher click in 3D
+          if (state.launcherActive) {
+            const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+            if (state.sliceEnabled) {
+              if (state.sliceAxis === 'xy') plane.set(new THREE.Vector3(0, 0, 1), -state.slicePos);
+              else if (state.sliceAxis === 'xz') plane.set(new THREE.Vector3(0, 1, 0), -state.slicePos);
+              else plane.set(new THREE.Vector3(1, 0, 0), -state.slicePos);
+            }
+            const hit = new THREE.Vector3();
+            if (this.raycaster.ray.intersectPlane(plane, hit)) {
+              spawnTestParticle(hit.x, hit.y, hit.z);
+              return;
+            }
+          }
+
+          const targets = state.probeActive ? [...this.pickables, this.probeSphere] : this.pickables;
+          const hits = this.raycaster.intersectObjects(targets, false);
+          if (hits.length > 0) {
+            const hit = hits[0];
+            const ud = hit.object.userData;
+            this.controls.enabled = false;
+
+            const camDir = new THREE.Vector3();
+            this.camera.getWorldDirection(camDir);
+            this.dragPlane.setFromNormalAndCoplanarPoint(camDir, hit.point);
+
+            if (ud.pickKind === 'probe') {
+              this.dragTarget = { kind: 'probe' };
+              this.dragOffset.copy(this.probeSphere.position).sub(hit.point);
+              state.isDragging = true;
+            } else if (ud.pickKind === 'object') {
+              selectObject(ud.id);
+              const obj = state.objects.find(o => o.id === ud.id);
+              if (obj && !obj.locked) {
+                this.dragTarget = { kind: 'object', id: ud.id };
+                this.dragOffset.set(obj.x, obj.y, obj.z).sub(hit.point);
+                state.isDragging = true;
+              }
+            }
+          } else {
+            // Deselect if clicked empty space (and wait to see if user just orbited)
+            this._downPos = { x: e.clientX, y: e.clientY };
+          }
+        });
+
+        window.addEventListener('pointermove', (e) => {
+          if (state.mode !== '3d') return;
+          this._updatePointerNDC(e.clientX, e.clientY);
+          this.raycaster.setFromCamera(this.pointerNDC, this.camera);
+
+          // Update pointerWorld for Spacebar launch
+          const refPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+          const pHit = new THREE.Vector3();
+          if (this.raycaster.ray.intersectPlane(refPlane, pHit)) {
+            state.pointerWorld = { x: pHit.x, y: pHit.y, z: pHit.z, valid: true };
+          }
+
+          if (!this.dragTarget) return;
+          const pt = new THREE.Vector3();
+          if (this.raycaster.ray.intersectPlane(this.dragPlane, pt)) {
+            pt.add(this.dragOffset);
+            if (this.dragTarget.kind === 'probe') {
+              state.probePos.x = pt.x;
+              state.probePos.y = pt.y;
+              state.probePos.z = pt.z;
+              this.updateProbe();
+              updateProbeUI();
+            } else if (this.dragTarget.kind === 'object') {
+              const obj = state.objects.find(o => o.id === this.dragTarget.id);
+              if (obj) {
+                let nx = pt.x, ny = pt.y, nz = pt.z;
+                if (state.snapToGrid) {
+                  const g = state.gridSpacing;
+                  nx = Math.round(nx / g) * g;
+                  ny = Math.round(ny / g) * g;
+                  nz = Math.round(nz / g) * g;
+                }
+                obj.x = nx; obj.y = ny; obj.z = nz;
+                constrainObjectToBoundary(obj);
+                markDirty(true, true, true);
+                updatePopoverPosition();
+                updatePopoverReadout();
+              }
+            }
+          }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+          if (state.mode !== '3d') return;
+          if (this.dragTarget) {
+            this.dragTarget = null;
+            this.controls.enabled = true;
+            state.isDragging = false;
+            markDirty(true, true, true);
+          } else if (this._downPos) {
+            const dist = Math.hypot(e.clientX - this._downPos.x, e.clientY - this._downPos.y);
+            if (dist < 4) selectObject(null);
+            this._downPos = null;
+          }
+        });
+      }
+
+      renderFrame() {
+        if (!this.initialized) return;
+        this.controls.update();
+
+        if (state.dirtyPhysics) {
+          physics.rebuildSources();
+          this.rebuildObjects();
+          this.rebuildVectorGrid();
+          state.dirtyPhysics = false;
+        }
+        if (state.dirtyFieldLines) {
+          this.rebuildFieldLines();
+          state.dirtyFieldLines = false;
+        }
+        if (state.dirtyHeatmap) {
+          this.updateSlicePlane();
+          state.dirtyHeatmap = false;
+        }
+        if (state.dirty3DIso) {
+          this.rebuildIsoSurfaces();
+          state.dirty3DIso = false;
+        }
+
+        this.updateProbe();
+        this.updateParticles();
+        this.applyDepthAttenuation();
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    const canvas2d = document.getElementById('canvas2d');
+    const container3d = document.getElementById('container3d');
+    const renderer2d = new Renderer2D(canvas2d);
+    const renderer3d = new Renderer3D(container3d);
+
+    function markDirty(phys = true, lines = true, heat = true, iso = true) {
+      if (phys) state.dirtyPhysics = true;
+      if (lines) state.dirtyFieldLines = true;
+      if (heat) state.dirtyHeatmap = true;
+      if (iso) state.dirty3DIso = true;
+    }
+
+    // =========================================================
+    // TEST CHARGE PARTICLES (RK4 Time Integrator)
+    // =========================================================
+    function spawnTestParticle(x, y, z = 0) {
+      if (physics.isInsideGroundedWall(x, y, z)) return;
+      state.particles.push({
+        x, y, z,
+        vx: 0, vy: 0, vz: 0,
+        q: state.testChargeQ,
+        trail: [[x, y, z]],
+        age: 0
+      });
+      if (state.particles.length > 24) state.particles.shift();
+    }
+
+    function stepParticles(dt) {
+      if (state.particles.length === 0) return;
+      const clampedDt = Math.min(0.032, dt);
+      const accelScale = 0.28; // Tuned for crisp educational visual speed
+
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.age += clampedDt;
+        const f = physics.evaluate(p.x, p.y, p.z);
+        const ax = p.q * f.Ex * accelScale;
+        const ay = p.q * f.Ey * accelScale;
+        const az = state.mode === '3d' ? p.q * f.Ez * accelScale : 0;
+
+        // Semi-implicit Euler with gentle velocity cap & slight drag
+        p.vx = (p.vx + ax * clampedDt) * 0.985;
+        p.vy = (p.vy + ay * clampedDt) * 0.985;
+        p.vz = (p.vz + az * clampedDt) * 0.985;
+        const spd = Math.hypot(p.vx, p.vy, p.vz);
+        if (spd > 6.5) {
+          const s = 6.5 / spd;
+          p.vx *= s; p.vy *= s; p.vz *= s;
+        }
+
+        p.x += p.vx * clampedDt;
+        p.y += p.vy * clampedDt;
+        p.z += p.vz * clampedDt;
+
+        p.trail.push([p.x, p.y, p.z]);
+        if (p.trail.length > 42) p.trail.shift();
+
+        // Remove if out of bounds, hit grounded wall, or absorbed in sink
+        const out = Math.abs(p.x) > 12 || Math.abs(p.y) > 12 || Math.abs(p.z) > 12;
+        if (out || p.age > 14 || physics.isInsideGroundedWall(p.x, p.y, p.z)) {
+          state.particles.splice(i, 1);
+          continue;
+        }
+        let absorbed = false;
+        for (const obj of state.objects) {
+          if (obj.type === 'point' && Math.hypot(p.x - obj.x, p.y - obj.y, p.z - obj.z) < 0.22 && p.q * obj.q < 0) {
+            absorbed = true; break;
+          }
+          if (obj.type === 'conductor' && Math.hypot(p.x - obj.x, p.y - obj.y, p.z - obj.z) < obj.radius) {
+            absorbed = true; break;
+          }
+        }
+        if (absorbed) state.particles.splice(i, 1);
+      }
+    }
+
+    // =========================================================
+    // 2D CANVAS INTERACTION (Select, Drag, Pan, Zoom, Probe)
+    // =========================================================
+    let drag2D = null; // { kind: 'object' | 'probe' | 'pan', id, offsetX, offsetY, startSX, startSY }
+
+    function hitTest2D(sx, sy) {
+      if (state.probeActive) {
+        const pp = renderer2d.worldToScreen(state.probePos.x, state.probePos.y);
+        if (Math.hypot(sx - pp.sx, sy - pp.sy) <= 18) {
+          return { kind: 'probe' };
+        }
+      }
+      // Reverse iterate so topmost draws are picked first
+      for (let i = state.objects.length - 1; i >= 0; i--) {
+        const obj = state.objects[i];
+        if (obj.type === 'point' || (obj.type === 'line' && obj.lineMode === 'perp')) {
+          const p = renderer2d.worldToScreen(obj.x, obj.y);
+          if (Math.hypot(sx - p.sx, sy - p.sy) <= 18) return { kind: 'object', id: obj.id };
+        } else if (obj.type === 'cloud' || obj.type === 'conductor') {
+          const p = renderer2d.worldToScreen(obj.x, obj.y);
+          const rPx = obj.radius * state.view2D.scale;
+          if (Math.hypot(sx - p.sx, sy - p.sy) <= Math.max(16, rPx)) return { kind: 'object', id: obj.id };
+        } else if (obj.type === 'dipole') {
+          const { pos, neg } = getDipolePoles(obj);
+          const sp = renderer2d.worldToScreen(pos.x, pos.y);
+          const sn = renderer2d.worldToScreen(neg.x, neg.y);
+          const sc = renderer2d.worldToScreen(obj.x, obj.y);
+          if (Math.hypot(sx - sp.sx, sy - sp.sy) <= 16 || Math.hypot(sx - sn.sx, sy - sn.sy) <= 16 || Math.hypot(sx - sc.sx, sy - sc.sy) <= 16) {
+            return { kind: 'object', id: obj.id };
+          }
+        } else if (obj.type === 'line' && obj.lineMode === 'rod') {
+          const rad = (obj.angle * Math.PI) / 180;
+          const half = obj.length * 0.5;
+          const p0 = renderer2d.worldToScreen(obj.x - half * Math.cos(rad), obj.y - half * Math.sin(rad));
+          const p1 = renderer2d.worldToScreen(obj.x + half * Math.cos(rad), obj.y + half * Math.sin(rad));
+          const dx = p1.sx - p0.sx, dy = p1.sy - p0.sy;
+          const len2 = dx * dx + dy * dy || 1;
+          const t = Math.max(0, Math.min(1, ((sx - p0.sx) * dx + (sy - p0.sy) * dy) / len2));
+          const px = p0.sx + t * dx, py = p0.sy + t * dy;
+          if (Math.hypot(sx - px, sy - py) <= 14) return { kind: 'object', id: obj.id };
+        }
+      }
+      return null;
+    }
+
+    canvas2d.addEventListener('pointerdown', (e) => {
+      if (state.mode !== '2d') return;
+      closeAllDropdowns();
+      const rect = canvas2d.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const w = renderer2d.screenToWorld(sx, sy);
+
+      if (state.launcherActive && e.button === 0) {
+        spawnTestParticle(w.x, w.y, 0);
+        return;
+      }
+
+      const hit = hitTest2D(sx, sy);
+      if (hit && e.button === 0) {
+        if (hit.kind === 'probe') {
+          drag2D = { kind: 'probe', offsetX: state.probePos.x - w.x, offsetY: state.probePos.y - w.y };
+          state.isDragging = true;
+        } else if (hit.kind === 'object') {
+          selectObject(hit.id);
+          const obj = state.objects.find(o => o.id === hit.id);
+          if (obj && !obj.locked) {
+            drag2D = { kind: 'object', id: hit.id, offsetX: obj.x - w.x, offsetY: obj.y - w.y };
+            state.isDragging = true;
+          }
+        }
+      } else {
+        drag2D = { kind: 'pan', startSX: sx, startSY: sy, startCX: state.view2D.cx, startCY: state.view2D.cy, moved: false };
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (state.mode !== '2d') return;
+      const rect = canvas2d.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const w = renderer2d.screenToWorld(sx, sy);
+      state.pointerWorld = { x: w.x, y: w.y, z: 0, valid: true };
+
+      if (!drag2D) {
+        const hit = hitTest2D(sx, sy);
+        canvas2d.style.cursor = state.launcherActive ? 'crosshair' : (hit ? 'grab' : 'default');
+        return;
+      }
+
+      if (drag2D.kind === 'probe') {
+        state.probePos.x = w.x + drag2D.offsetX;
+        state.probePos.y = w.y + drag2D.offsetY;
+        state.probePos.z = 0;
+        updateProbeUI();
+      } else if (drag2D.kind === 'object') {
+        const obj = state.objects.find(o => o.id === drag2D.id);
+        if (obj) {
+          let nx = w.x + drag2D.offsetX;
+          let ny = w.y + drag2D.offsetY;
+          if (state.snapToGrid) {
+            const g = state.gridSpacing;
+            nx = Math.round(nx / g) * g;
+            ny = Math.round(ny / g) * g;
+          }
+          obj.x = nx; obj.y = ny;
+          constrainObjectToBoundary(obj);
+          markDirty(true, true, true, false);
+          updatePopoverPosition();
+          updatePopoverReadout();
+        }
+      } else if (drag2D.kind === 'pan') {
+        const dx = sx - drag2D.startSX;
+        const dy = sy - drag2D.startSY;
+        if (Math.hypot(dx, dy) > 3) drag2D.moved = true;
+        state.view2D.cx = drag2D.startCX - dx / state.view2D.scale;
+        state.view2D.cy = drag2D.startCY + dy / state.view2D.scale;
+        state.dirtyHeatmap = true;
+        updatePopoverPosition();
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (state.mode !== '2d' || !drag2D) return;
+      if (drag2D.kind === 'pan' && !drag2D.moved) {
+        selectObject(null);
+      }
+      if (drag2D.kind === 'object') {
+        state.isDragging = false;
+        markDirty(true, true, true, false);
+      } else if (drag2D.kind === 'probe') {
+        state.isDragging = false;
+      }
+      drag2D = null;
+    });
+
+    canvas2d.addEventListener('wheel', (e) => {
+      if (state.mode !== '2d') return;
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.91;
+      const rect = canvas2d.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const before = renderer2d.screenToWorld(sx, sy);
+
+      state.view2D.scale = Math.max(24, Math.min(240, state.view2D.scale * zoomFactor));
+      const after = renderer2d.screenToWorld(sx, sy);
+      state.view2D.cx += before.x - after.x;
+      state.view2D.cy += before.y - after.y;
+      state.dirtyHeatmap = true;
+      updatePopoverPosition();
+    }, { passive: false });
+
+    // =========================================================
+    // DOCK DRAG-AND-DROP CHARGE PALETTE
+    // =========================================================
+    const dockGhost = document.getElementById('dock-drag-ghost');
+    const dockGhostDot = document.getElementById('dock-drag-ghost-dot');
+    let dockDraggingType = null;
+
+    document.querySelectorAll('[data-spawn-type]').forEach(item => {
+      const type = item.dataset.spawnType;
+      item.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        closeAllDropdowns();
+        dockDraggingType = type;
+        dockGhost.classList.remove('hidden');
+        dockGhost.style.left = `${e.clientX}px`;
+        dockGhost.style.top = `${e.clientY}px`;
+        dockGhostDot.className = 'w-4 h-4 rounded-full ' + (
+          type === 'conductor' ? 'bg-slate-300' :
+          type === 'cloud' ? 'bg-amber-400' :
+          state.defaultPolarity > 0 ? 'bg-rose-400' : 'bg-sky-400'
+        );
+      });
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!dockDraggingType) return;
+      dockGhost.style.left = `${e.clientX}px`;
+      dockGhost.style.top = `${e.clientY}px`;
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (!dockDraggingType) return;
+      const type = dockDraggingType;
+      dockDraggingType = null;
+      dockGhost.classList.add('hidden');
+
+      // Ignore if released right over the left dock itself
+      if (e.clientX < 68) {
+        // Treat click as quick spawn near center!
+        const jitter = () => (Math.random() - 0.5) * 0.6;
+        const obj = createChargeObject(type, jitter(), jitter(), 0);
+        state.objects.push(obj);
+        markDirty(true, true, true, true);
+        selectObject(obj.id);
+        return;
+      }
+
+      let wx = 0, wy = 0, wz = 0;
+      if (state.mode === '2d') {
+        const rect = canvas2d.getBoundingClientRect();
+        const pt = renderer2d.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        wx = pt.x; wy = pt.y;
+      } else {
+        renderer3d._updatePointerNDC(e.clientX, e.clientY);
+        renderer3d.raycaster.setFromCamera(renderer3d.pointerNDC, renderer3d.camera);
+        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        if (state.sliceEnabled) {
+          if (state.sliceAxis === 'xy') dropPlane.set(new THREE.Vector3(0, 0, 1), -state.slicePos);
+          else if (state.sliceAxis === 'xz') dropPlane.set(new THREE.Vector3(0, 1, 0), -state.slicePos);
+          else dropPlane.set(new THREE.Vector3(1, 0, 0), -state.slicePos);
+        }
+        const hit = new THREE.Vector3();
+        if (renderer3d.raycaster.ray.intersectPlane(dropPlane, hit)) {
+          wx = hit.x; wy = hit.y; wz = hit.z;
+        }
+      }
+
+      if (state.snapToGrid) {
+        const g = state.gridSpacing;
+        wx = Math.round(wx / g) * g;
+        wy = Math.round(wy / g) * g;
+        wz = Math.round(wz / g) * g;
+      }
+
+      const obj = createChargeObject(type, wx, wy, wz);
+      state.objects.push(obj);
+      markDirty(true, true, true, true);
+      selectObject(obj.id);
+    });
+
+    // =========================================================
+    // CONTEXTUAL SELECTION POPOVER
+    // =========================================================
+    const popover = document.getElementById('selection-popover');
+    const popTitle = document.getElementById('pop-title');
+    const popDot = document.getElementById('pop-dot');
+    const popBody = document.getElementById('pop-body');
+    const popCoords = document.getElementById('pop-coords');
+    const popLock = document.getElementById('pop-lock');
+    const popDelete = document.getElementById('pop-delete');
+    const popClose = document.getElementById('pop-close');
+
+    function selectObject(id) {
+      state.selectedId = id;
+      if (state.mode === '3d') renderer3d.rebuildObjects();
+      if (id === null) {
+        popover.classList.add('hidden');
+        return;
+      }
+      const obj = state.objects.find(o => o.id === id);
+      if (!obj) {
+        popover.classList.add('hidden');
+        return;
+      }
+      renderPopoverContent(obj);
+      popover.classList.remove('hidden');
+      updatePopoverPosition();
+    }
+
+    function renderPopoverContent(obj) {
+      const titles = {
+        point: 'Point Charge',
+        line: 'Line Charge',
+        cloud: 'Spherical Cloud',
+        conductor: 'Conducting Sphere',
+        dipole: 'Electric Dipole'
+      };
+      popTitle.textContent = titles[obj.type] || 'Object';
+      popLock.innerHTML = obj.locked
+        ? '<i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i>'
+        : '<i data-lucide="unlock" class="w-3.5 h-3.5"></i>';
+
+      const makeSlider = (label, valStr, min, max, step, val, onInput) => {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = `
+          <div class="flex justify-between text-[11px] mb-0.5">
+            <span class="text-slate-400">${label}</span>
+            <span class="font-mono text-slate-100 tabular-nums val-lbl">${valStr}</span>
+          </div>
+          <input type="range" min="${min}" max="${max}" step="${step}" value="${val}" class="w-full" />
+        `;
+        const inp = wrap.querySelector('input');
+        const lbl = wrap.querySelector('.val-lbl');
+        inp.addEventListener('input', () => {
+          onInput(parseFloat(inp.value), lbl);
+          constrainObjectToBoundary(obj);
+          markDirty(true, true, true, true);
+          updatePopoverReadout();
+        });
+        return wrap;
+      };
+
+      popBody.innerHTML = '';
+
+      if (obj.type === 'point') {
+        popDot.className = `w-2.5 h-2.5 rounded-full ${obj.q >= 0 ? 'bg-rose-400' : 'bg-sky-400'}`;
+        popBody.appendChild(makeSlider('Charge q', `${obj.q >= 0 ? '+' : ''}${obj.q.toFixed(1)} nC`, -10, 10, 0.2, obj.q, (v, lbl) => {
+          obj.q = v;
+          lbl.textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)} nC`;
+          popDot.className = `w-2.5 h-2.5 rounded-full ${v >= 0 ? 'bg-rose-400' : 'bg-sky-400'}`;
+        }));
+      } else if (obj.type === 'line') {
+        popDot.className = `w-2.5 h-2.5 rounded-full ${obj.lambda >= 0 ? 'bg-rose-400' : 'bg-sky-400'}`;
+        // Geometry toggle: Infinite perpendicular vs Finite rod
+        const modeWrap = document.createElement('div');
+        modeWrap.className = 'grid grid-cols-2 gap-1 bg-slate-950/60 p-0.5 rounded-lg border border-white/[0.06] text-[11px]';
+        modeWrap.innerHTML = `
+          <button data-lm="perp" class="py-1 rounded-md font-medium transition-colors ${obj.lineMode === 'perp' ? 'bg-white/[0.12] text-white' : 'text-slate-400'}">∞ ⊥ Line (1/r)</button>
+          <button data-lm="rod" class="py-1 rounded-md font-medium transition-colors ${obj.lineMode === 'rod' ? 'bg-white/[0.12] text-white' : 'text-slate-400'}">Finite Rod</button>
+        `;
+        modeWrap.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            obj.lineMode = btn.dataset.lm;
+            markDirty(true, true, true, true);
+            renderPopoverContent(obj);
+          });
+        });
+        popBody.appendChild(modeWrap);
+
+        popBody.appendChild(makeSlider('Linear Density λ', `${obj.lambda >= 0 ? '+' : ''}${obj.lambda.toFixed(1)} nC/m`, -10, 10, 0.2, obj.lambda, (v, lbl) => {
+          obj.lambda = v;
+          lbl.textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)} nC/m`;
+        }));
+
+        if (obj.lineMode === 'rod') {
+          popBody.appendChild(makeSlider('Length L', `${obj.length.toFixed(1)} m`, 0.8, 6.0, 0.2, obj.length, (v, lbl) => {
+            obj.length = v;
+            lbl.textContent = `${v.toFixed(1)} m`;
+          }));
+          popBody.appendChild(makeSlider('Angle θ', `${obj.angle.toFixed(0)}°`, -180, 180, 5, obj.angle, (v, lbl) => {
+            obj.angle = v;
+            lbl.textContent = `${v.toFixed(0)}°`;
+          }));
+        }
+      } else if (obj.type === 'cloud') {
+        popDot.className = `w-2.5 h-2.5 rounded-full ${obj.rho >= 0 ? 'bg-amber-400' : 'bg-sky-400'}`;
+        popBody.appendChild(makeSlider('Volume Density ρ', `${obj.rho >= 0 ? '+' : ''}${obj.rho.toFixed(2)} nC/m³`, -2.0, 2.0, 0.05, obj.rho, (v, lbl) => {
+          obj.rho = v;
+          lbl.textContent = `${v >= 0 ? '+' : ''}${v.toFixed(2)} nC/m³`;
+        }));
+        popBody.appendChild(makeSlider('Cloud Radius R', `${obj.radius.toFixed(2)} m`, 0.5, 3.0, 0.1, obj.radius, (v, lbl) => {
+          obj.radius = v;
+          lbl.textContent = `${v.toFixed(2)} m`;
+        }));
+      } else if (obj.type === 'conductor') {
+        popDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-300';
+        const modeWrap = document.createElement('div');
+        modeWrap.className = 'grid grid-cols-2 gap-1 bg-slate-950/60 p-0.5 rounded-lg border border-white/[0.06] text-[11px]';
+        modeWrap.innerHTML = `
+          <button data-cm="Q" class="py-1 rounded-md font-medium transition-colors ${obj.condMode === 'Q' ? 'bg-white/[0.12] text-white' : 'text-slate-400'}">Fixed Q</button>
+          <button data-cm="V0" class="py-1 rounded-md font-medium transition-colors ${obj.condMode === 'V0' ? 'bg-white/[0.12] text-white' : 'text-slate-400'}">Fixed V₀</button>
+        `;
+        modeWrap.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            obj.condMode = btn.dataset.cm;
+            markDirty(true, true, true, true);
+            renderPopoverContent(obj);
+          });
+        });
+        popBody.appendChild(modeWrap);
+
+        if (obj.condMode === 'Q') {
+          popBody.appendChild(makeSlider('Total Charge Q', `${obj.Q >= 0 ? '+' : ''}${obj.Q.toFixed(1)} nC`, -10, 10, 0.2, obj.Q, (v, lbl) => {
+            obj.Q = v;
+            lbl.textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)} nC`;
+          }));
+        } else {
+          popBody.appendChild(makeSlider('Potential V₀', `${obj.V0 >= 0 ? '+' : ''}${obj.V0.toFixed(1)} V`, -60, 60, 1, obj.V0, (v, lbl) => {
+            obj.V0 = v;
+            lbl.textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)} V`;
+          }));
+        }
+        popBody.appendChild(makeSlider('Sphere Radius R', `${obj.radius.toFixed(2)} m`, 0.4, 2.2, 0.05, obj.radius, (v, lbl) => {
+          obj.radius = v;
+          lbl.textContent = `${v.toFixed(2)} m`;
+        }));
+      } else if (obj.type === 'dipole') {
+        popDot.className = 'w-2.5 h-2.5 rounded-full bg-gradient-to-r from-rose-400 to-sky-400';
+        popBody.appendChild(makeSlider('Pole Magnitude |q|', `${obj.q.toFixed(1)} nC`, 0.5, 10, 0.2, obj.q, (v, lbl) => {
+          obj.q = v;
+          lbl.textContent = `${v.toFixed(1)} nC`;
+        }));
+        popBody.appendChild(makeSlider('Separation d', `${obj.separation.toFixed(2)} m`, 0.4, 3.6, 0.1, obj.separation, (v, lbl) => {
+          obj.separation = v;
+          lbl.textContent = `${v.toFixed(2)} m`;
+        }));
+        popBody.appendChild(makeSlider('Orientation θ', `${obj.angle.toFixed(0)}°`, -180, 180, 5, obj.angle, (v, lbl) => {
+          obj.angle = v;
+          lbl.textContent = `${v.toFixed(0)}°`;
+        }));
+      }
+
+      if (window.lucide) lucide.createIcons({ nodes: [popLock] });
+      updatePopoverReadout();
+    }
+
+    function updatePopoverReadout() {
+      const obj = state.objects.find(o => o.id === state.selectedId);
+      if (!obj) return;
+      const F = physics.computeNetForce(obj);
+      const fMag = Math.hypot(F.Fx, F.Fy, F.Fz);
+      const posTxt = state.mode === '3d'
+        ? `(${obj.x.toFixed(1)}, ${obj.y.toFixed(1)}, ${obj.z.toFixed(1)})`
+        : `(${obj.x.toFixed(1)}, ${obj.y.toFixed(1)})`;
+      popCoords.innerHTML = `<span>${posTxt} m</span><span class="text-emerald-300">|F|=${fmtForce(fMag)}</span>`;
+    }
+
+    function updatePopoverPosition() {
+      const obj = state.objects.find(o => o.id === state.selectedId);
+      if (!obj || popover.classList.contains('hidden')) return;
+      let sx, sy;
+      if (state.mode === '2d') {
+        const p = renderer2d.worldToScreen(obj.x, obj.y);
+        sx = p.sx; sy = p.sy;
+      } else if (renderer3d.initialized) {
+        const vec = new THREE.Vector3(obj.x, obj.y, obj.z).project(renderer3d.camera);
+        sx = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        sy = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+      } else {
+        return;
+      }
+
+      const w = 264, h = popover.offsetHeight || 190;
+      let left = sx + 26;
+      let top = sy - h * 0.5;
+      if (left + w > window.innerWidth - 16) left = sx - w - 26;
+      if (left < 72) left = 72;
+      top = Math.max(70, Math.min(window.innerHeight - h - 16, top));
+      popover.style.left = `${left}px`;
+      popover.style.top = `${top}px`;
+    }
+
+    popLock.addEventListener('click', () => {
+      const obj = state.objects.find(o => o.id === state.selectedId);
+      if (!obj) return;
+      obj.locked = !obj.locked;
+      renderPopoverContent(obj);
+    });
+
+    popDelete.addEventListener('click', () => {
+      if (state.selectedId === null) return;
+      state.objects = state.objects.filter(o => o.id !== state.selectedId);
+      selectObject(null);
+      markDirty(true, true, true, true);
+    });
+
+    popClose.addEventListener('click', () => selectObject(null));
+
+    // =========================================================
+    // PROBE & DROPDOWN UI WIRING
+    // =========================================================
+    function updateProbeUI() {
+      const card = document.getElementById('probe-card');
+      if (!state.probeActive) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+      const p = state.probePos;
+      const f = physics.evaluate(p.x, p.y, state.mode === '3d' ? p.z : 0);
+      document.getElementById('probe-v').textContent = fmtVal(f.V, 'V');
+      document.getElementById('probe-e-mag').textContent = fmtVal(f.E, 'V/m');
+      document.getElementById('probe-e-vec').textContent = state.mode === '3d'
+        ? `${f.Ex.toFixed(1)}, ${f.Ey.toFixed(1)}, ${f.Ez.toFixed(1)}`
+        : `${f.Ex.toFixed(1)}, ${f.Ey.toFixed(1)}`;
+      document.getElementById('probe-pos').textContent = state.mode === '3d'
+        ? `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`
+        : `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
+      document.getElementById('probe-region-badge').textContent = f.region;
+    }
+
+    // Dropdown management
+    const dropdownPanels = {
+      viz: document.getElementById('panel-viz'),
+      boundaries: document.getElementById('panel-boundaries'),
+      physics: document.getElementById('panel-physics'),
+      presets: document.getElementById('panel-presets')
+    };
+    let activeDropdown = null;
+
+    function closeAllDropdowns() {
+      activeDropdown = null;
+      Object.values(dropdownPanels).forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('[data-dropdown-btn]').forEach(b => b.classList.remove('bg-white/[0.1]', 'text-white'));
+    }
+
+    document.querySelectorAll('[data-dropdown-btn]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const key = btn.dataset.dropdownBtn;
+        if (activeDropdown === key) {
+          closeAllDropdowns();
+          return;
+        }
+        closeAllDropdowns();
+        activeDropdown = key;
+        const panel = dropdownPanels[key];
+        panel.classList.remove('hidden');
+        btn.classList.add('bg-white/[0.1]', 'text-white');
+
+        // Align panel horizontally under button on wider screens
+        if (window.innerWidth >= 640) {
+          const rect = btn.getBoundingClientRect();
+          const pw = panel.offsetWidth || 300;
+          const left = Math.max(12, Math.min(window.innerWidth - pw - 12, rect.left + rect.width * 0.5 - pw * 0.5));
+          panel.style.left = `${left}px`;
+          panel.style.transform = 'none';
+        } else {
+          panel.style.left = '50%';
+          panel.style.transform = 'translateX(-50%)';
+        }
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!activeDropdown) return;
+      const panel = dropdownPanels[activeDropdown];
+      if (!panel.contains(e.target) && !e.target.closest('[data-dropdown-btn]')) {
+        closeAllDropdowns();
+      }
+    });
+
+    // Toggle Switches
+    function syncToggleUI() {
+      document.querySelectorAll('.viz-toggle').forEach(btn => {
+        const key = btn.dataset.toggle;
+        const pill = btn.querySelector('.toggle-pill');
+        pill.classList.toggle('active', !!state[key]);
+      });
+      document.getElementById('legend-potential').classList.toggle('opacity-30', !state.showHeatmap);
+    }
+
+    document.querySelectorAll('.viz-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggle;
+        state[key] = !state[key];
+        syncToggleUI();
+        if (key === 'showFieldLines') markDirty(false, true, false, false);
+        else if (key === 'showHeatmap' || key === 'showEquipotentials') markDirty(false, false, true, true);
+        else if (key === 'showVectorGrid' || key === 'showForceVectors' || key === 'showVirtualImages') markDirty(true, false, false, false);
+      });
+    });
+
+    // Boundaries UI
+    function syncBoundaryUI() {
+      document.querySelectorAll('.boundary-btn').forEach(btn => {
+        const active = btn.dataset.boundary === state.boundary;
+        btn.classList.toggle('bg-emerald-500/10', active);
+        btn.classList.toggle('border-emerald-400/30', active);
+        btn.querySelector('.boundary-check').style.opacity = active ? '1' : '0';
+      });
+      document.getElementById('badge-boundary').classList.toggle('hidden', state.boundary === 'none');
+
+      const paramWrap = document.getElementById('boundary-param-wrap');
+      const paramLbl = document.getElementById('boundary-param-label');
+      const paramVal = document.getElementById('boundary-param-val');
+      if (state.boundary === 'parallel' || state.boundary === 'cavity') {
+        paramWrap.classList.remove('hidden');
+        paramLbl.textContent = state.boundary === 'parallel' ? 'Plate Half-Gap h' : 'Cavity Radius R';
+        paramVal.textContent = `${state.boundaryParam.toFixed(1)} m`;
+      } else {
+        paramWrap.classList.add('hidden');
+      }
+    }
+
+    document.querySelectorAll('.boundary-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.boundary = btn.dataset.boundary;
+        constrainAllObjects();
+        syncBoundaryUI();
+        markDirty(true, true, true, true);
+        updateProbeUI();
+        updatePopoverPosition();
+      });
+    });
+
+    document.getElementById('boundary-param-slider').addEventListener('input', (e) => {
+      state.boundaryParam = parseFloat(e.target.value);
+      constrainAllObjects();
+      syncBoundaryUI();
+      markDirty(true, true, true, true);
+    });
+
+    // Physics & Grid UI
+    document.getElementById('slider-grid-spacing').addEventListener('input', (e) => {
+      state.gridSpacing = parseFloat(e.target.value);
+      document.getElementById('val-grid-spacing').textContent = `${state.gridSpacing.toFixed(2)} m`;
+    });
+
+    document.getElementById('slider-epsilon-r').addEventListener('input', (e) => {
+      state.epsilonR = parseFloat(e.target.value);
+      document.getElementById('val-epsilon-r').textContent = state.epsilonR.toFixed(1);
+      markDirty(true, true, true, true);
+      updateProbeUI();
+    });
+
+    document.getElementById('slider-streamline-density').addEventListener('input', (e) => {
+      state.streamlineDensity = parseInt(e.target.value, 10);
+      document.getElementById('val-streamline-density').textContent = state.streamlineDensity;
+      markDirty(false, true, false, false);
+    });
+
+    function syncQualityUI() {
+      document.querySelectorAll('.quality-btn').forEach(btn => {
+        const active = btn.dataset.quality === state.quality;
+        btn.classList.toggle('bg-white/[0.12]', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+    }
+    document.querySelectorAll('.quality-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.quality = btn.dataset.quality;
+        syncQualityUI();
+        markDirty(false, true, false, false);
+      });
+    });
+
+    // Launcher & Probe Controls
+    function syncLauncherUI() {
+      const active = state.launcherActive;
+      document.getElementById('btn-launcher-toggle').classList.toggle('bg-sky-500/20', active);
+      document.getElementById('btn-launcher-toggle').classList.toggle('text-sky-300', active);
+      document.getElementById('btn-launcher-panel-toggle').textContent = `Click-to-Launch: ${active ? 'On' : 'Off'}`;
+      document.getElementById('launcher-banner').classList.toggle('hidden', !active);
+      document.getElementById('launcher-banner-q').textContent = state.testChargeQ > 0 ? '+1 nC' : '−1 nC';
+
+      const posBtn = document.getElementById('btn-test-pos');
+      const negBtn = document.getElementById('btn-test-neg');
+      const isPos = state.testChargeQ > 0;
+      posBtn.className = `flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${isPos ? 'bg-rose-500/20 border-rose-400/50 text-rose-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400'}`;
+      negBtn.className = `flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${!isPos ? 'bg-sky-500/20 border-sky-400/50 text-sky-200' : 'bg-white/[0.03] border-white/[0.06] text-slate-400'}`;
+    }
+
+    document.getElementById('btn-test-pos').addEventListener('click', () => { state.testChargeQ = 1.0; syncLauncherUI(); });
+    document.getElementById('btn-test-neg').addEventListener('click', () => { state.testChargeQ = -1.0; syncLauncherUI(); });
+    document.getElementById('btn-launcher-toggle').addEventListener('click', () => { state.launcherActive = !state.launcherActive; syncLauncherUI(); });
+    document.getElementById('btn-launcher-panel-toggle').addEventListener('click', () => { state.launcherActive = !state.launcherActive; syncLauncherUI(); });
+    document.getElementById('btn-clear-particles').addEventListener('click', () => { state.particles = []; });
+
+    document.getElementById('btn-probe-toggle').addEventListener('click', () => {
+      state.probeActive = !state.probeActive;
+      document.getElementById('btn-probe-toggle').classList.toggle('bg-emerald-500/20', state.probeActive);
+      document.getElementById('btn-probe-toggle').classList.toggle('text-emerald-300', state.probeActive);
+      updateProbeUI();
+    });
+
+    // Dock Polarity Flip
+    const dockPolBtn = document.getElementById('btn-dock-polarity');
+    dockPolBtn.addEventListener('click', () => {
+      state.defaultPolarity *= -1;
+      const isPos = state.defaultPolarity > 0;
+      dockPolBtn.textContent = isPos ? '+q' : '−q';
+      dockPolBtn.className = `w-9 h-7 rounded-xl flex items-center justify-center text-[11px] font-mono font-bold transition-all border border-white/[0.1] ${isPos ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30' : 'bg-sky-500/20 text-sky-300 hover:bg-sky-500/30'}`;
+    });
+
+    // =========================================================
+    // 2D / 3D MODE SWITCHER & 3D SLICE CONTROLS
+    // =========================================================
+    function setMode(targetMode) {
+      if (state.mode === targetMode) return;
+      state.mode = targetMode;
+      const is3D = targetMode === '3d';
+
+      const ind = document.getElementById('mode-indicator');
+      ind.style.transform = is3D ? 'translateX(100%)' : 'translateX(0%)';
+      document.getElementById('btn-mode-2d').className = `relative z-10 px-3 py-1 text-xs font-semibold tracking-tight transition-colors ${!is3D ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`;
+      document.getElementById('btn-mode-3d').className = `relative z-10 px-3 py-1 text-xs font-semibold tracking-tight transition-colors ${is3D ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`;
+
+      if (is3D) {
+        renderer3d.init();
+        renderer3d.resize();
+        canvas2d.classList.add('opacity-0', 'pointer-events-none');
+        container3d.classList.remove('opacity-0', 'pointer-events-none');
+        document.getElementById('slice-controls-3d').classList.remove('hidden');
+        document.getElementById('camera-controls-3d').classList.remove('hidden');
+      } else {
+        container3d.classList.add('opacity-0', 'pointer-events-none');
+        canvas2d.classList.remove('opacity-0', 'pointer-events-none');
+        document.getElementById('slice-controls-3d').classList.add('hidden');
+        document.getElementById('camera-controls-3d').classList.add('hidden');
+      }
+      markDirty(true, true, true, true);
+      updateProbeUI();
+      updatePopoverPosition();
+    }
+
+    document.getElementById('btn-mode-2d').addEventListener('click', () => setMode('2d'));
+    document.getElementById('btn-mode-3d').addEventListener('click', () => setMode('3d'));
+
+    // 3D Slice Controls
+    document.getElementById('btn-slice-toggle').addEventListener('click', () => {
+      state.sliceEnabled = !state.sliceEnabled;
+      document.getElementById('btn-slice-toggle').classList.toggle('opacity-45', !state.sliceEnabled);
+      markDirty(false, false, true, false);
+    });
+
+    document.querySelectorAll('.slice-axis-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.sliceAxis = btn.dataset.sliceAxis;
+        document.querySelectorAll('.slice-axis-btn').forEach(b => {
+          const active = b.dataset.sliceAxis === state.sliceAxis;
+          b.className = `slice-axis-btn px-2 py-0.5 rounded-md ${active ? 'text-white bg-white/[0.12]' : 'text-slate-400 hover:text-white'}`;
+        });
+        const coord = state.sliceAxis === 'xy' ? 'z' : state.sliceAxis === 'xz' ? 'y' : 'x';
+        document.getElementById('val-slice-pos').textContent = `${coord} = ${state.slicePos.toFixed(1)}m`;
+        markDirty(false, false, true, false);
+      });
+    });
+
+    document.getElementById('slider-slice-pos').addEventListener('input', (e) => {
+      state.slicePos = parseFloat(e.target.value);
+      const coord = state.sliceAxis === 'xy' ? 'z' : state.sliceAxis === 'xz' ? 'y' : 'x';
+      document.getElementById('val-slice-pos').textContent = `${coord} = ${state.slicePos.toFixed(1)}m`;
+      markDirty(false, false, true, false);
+    });
+
+    document.querySelectorAll('[data-cam]').forEach(btn => {
+      btn.addEventListener('click', () => renderer3d.setCameraPreset(btn.dataset.cam));
+    });
+
+    // =========================================================
+    // EDUCATIONAL PRESETS & RESET
+    // =========================================================
+    function loadPreset(name) {
+      state.objects = [];
+      state.particles = [];
+      selectObject(null);
+      state.boundary = 'none';
+      state.view2D = { cx: 0, cy: 0, scale: 78 };
+
+      if (name === 'single') {
+        state.objects.push(createChargeObject('point', 0, 0, 0, { q: 6.0 }));
+      } else if (name === 'dipole') {
+        state.objects.push(createChargeObject('point', -1.4, 0, 0, { q: 5.0 }));
+        state.objects.push(createChargeObject('point', 1.4, 0, 0, { q: -5.0 }));
+      } else if (name === 'quadrupole') {
+        state.objects.push(createChargeObject('point', -1.5, 1.5, 0, { q: 5.0 }));
+        state.objects.push(createChargeObject('point', 1.5, 1.5, 0, { q: -5.0 }));
+        state.objects.push(createChargeObject('point', 1.5, -1.5, 0, { q: 5.0 }));
+        state.objects.push(createChargeObject('point', -1.5, -1.5, 0, { q: -5.0 }));
+      } else if (name === 'transmission') {
+        state.boundary = 'plane';
+        state.showVirtualImages = true;
+        state.view2D.cy = 0.7;
+        state.objects.push(createChargeObject('line', 0, 2.2, 0, { lambda: 5.0, lineMode: 'perp' }));
+      } else if (name === 'corner90') {
+        state.boundary = 'corner';
+        state.showVirtualImages = true;
+        state.view2D.cx = 0.8;
+        state.view2D.cy = 0.8;
+        state.objects.push(createChargeObject('line', 1.8, 1.8, 0, { lambda: 5.0, lineMode: 'perp' }));
+      } else if (name === 'cloud') {
+        state.objects.push(createChargeObject('cloud', 0, 0, 0, { rho: 0.75, radius: 1.8 }));
+      } else if (name === 'capacitor') {
+        state.objects.push(createChargeObject('line', 0, 1.1, 0, { lambda: 5.5, lineMode: 'rod', length: 4.8, angle: 0 }));
+        state.objects.push(createChargeObject('line', 0, -1.1, 0, { lambda: -5.5, lineMode: 'rod', length: 4.8, angle: 0 }));
+      }
+
+      syncBoundaryUI();
+      syncToggleUI();
+      markDirty(true, true, true, true);
+      updateProbeUI();
+      closeAllDropdowns();
+    }
+
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => loadPreset(btn.dataset.preset));
+    });
+
+    document.getElementById('btn-reset-canvas').addEventListener('click', () => {
+      state.objects = [];
+      state.particles = [];
+      state.boundary = 'none';
+      state.view2D = { cx: 0, cy: 0, scale: 78 };
+      selectObject(null);
+      syncBoundaryUI();
+      markDirty(true, true, true, true);
+      updateProbeUI();
+    });
+
+    // =========================================================
+    // KEYBOARD SHORTCUTS
+    // =========================================================
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (state.pointerWorld.valid) {
+          spawnTestParticle(state.pointerWorld.x, state.pointerWorld.y, state.mode === '3d' ? state.pointerWorld.z : 0);
+        } else {
+          spawnTestParticle((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0);
+        }
+      } else if (e.key === '2') {
+        setMode('2d');
+      } else if (e.key === '3') {
+        setMode('3d');
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (state.selectedId !== null) {
+          state.objects = state.objects.filter(o => o.id !== state.selectedId);
+          selectObject(null);
+          markDirty(true, true, true, true);
+        }
+      } else if (e.key === 'Escape') {
+        selectObject(null);
+        closeAllDropdowns();
+      } else if (e.key.toLowerCase() === 'p') {
+        document.getElementById('btn-probe-toggle').click();
+      } else if (e.key.toLowerCase() === 'g') {
+        state.snapToGrid = !state.snapToGrid;
+        syncToggleUI();
+      }
+    });
+
+    // =========================================================
+    // ANIMATION LOOP & BOOTSTRAP
+    // =========================================================
+    let lastTime = performance.now();
+    function tick(now) {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      stepParticles(dt);
+
+      if (state.mode === '2d') {
+        if (state.dirtyPhysics) {
+          physics.rebuildSources();
+          state.dirtyPhysics = false;
+        }
+        renderer2d.render();
+      } else {
+        renderer3d.renderFrame();
+      }
+
+      if (state.probeActive && state.particles.length > 0) {
+        updateProbeUI();
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function handleResize() {
+      renderer2d.resize();
+      renderer3d.resize();
+      updatePopoverPosition();
+    }
+    window.addEventListener('resize', handleResize);
+
+    // Initialize Icons, UI & Starting Dipole Scene
+    if (window.lucide) lucide.createIcons();
+    syncToggleUI();
+    syncBoundaryUI();
+    syncQualityUI();
+    syncLauncherUI();
+    handleResize();
+    loadPreset('dipole');
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
